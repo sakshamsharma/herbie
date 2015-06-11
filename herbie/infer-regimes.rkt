@@ -13,11 +13,11 @@
 
 (define (infer-splitpoints alts [axis #f])
   (debug "Finding splitpoints for:" alts #:from 'regime-changes #:depth 2)
-  (let* ([options (map (curry option-on-expr alts)
-		       (if axis (list axis)
-			   (exprs-to-branch-on alts)))]
-	 [best-option (argmin (compose errors-score option-errors) options)]
-	 [splitpoints (option-splitpoints best-option)]
+  (let* ([option (option-on-expr alts
+                                 (or axis
+                                     (pick-best-branch-expr
+                                      (*pcontext*) (exprs-to-branch-on alts))))]
+	 [splitpoints (option-splitpoints option)]
 	 [altns (used-alts splitpoints alts)]
 	 [splitpoints* (coerce-indices splitpoints)])
     (debug #:from 'regimes "Found splitpoints:" splitpoints* ", with alts" altns)
@@ -29,6 +29,50 @@
            (display "#<option " port)
            (write (option-splitpoints opt) port)
            (display ">" port))])
+
+;; Branch expression picking code
+
+(define *bits-bad-threshold* (make-parameter 10))
+;; How many clusters to attempt to cluster points into to determine
+;; which axis is best.
+(define *num-clusters* (make-parameter 5))
+;; The number of trials of k-means scoring to use.
+(define *num-scores* (make-parameter 3))
+
+(define (pick-best-branch-expr context exprs)
+  (let ([bad-points (for/list ([(p ex) (in-pcontext context)]
+                               [e (errors (*start-prog*) context)]
+                               #:when (> e (expt 2 (*bits-bad-threshold*))))
+                      p)])
+    (if (null? bad-points) (car exprs)
+        (argmax (λ (branch-expr)
+                  (cluster-rank (for/list ([bad-point bad-points])
+                                  ((eval-prog `(λ ,(program-variables (*start-prog*))
+                                                 ,branch-expr) mode:fl)
+                                   bad-point))))
+                exprs))))
+
+;; Ranks a set of numbers by how well they group into clusters.
+(define (cluster-rank xs)
+  (for/sum ([idx (in-range (*num-scores*))])
+    (k-means-score xs (*num-clusters*))))
+;; Scores how well the given numbers can be clustered into
+;; num-clusters clusters using k-means.
+(define (k-means-score xs num-clusters)
+  (let ([initial-means
+         (for/list ([idx (in-range num-clusters)])
+           (list-ref xs (random (length xs))))])
+    (let loop ([means initial-means])
+      (let* ([clustered-samples
+              (for/list ([x xs])
+                (cons x (argmin (λ (mean) (abs (- mean x))) means)))]
+             [means* (for/list ([mean means])
+                       (let ([cluster-xs (filter (compose (curry equal? mean) cdr) clustered-samples)])
+                         (round (/ (apply + (map car cluster-xs)) (length cluster-xs)))))])
+        (if (equal? means* means)
+            (exact->inexact (/ (apply + (for/list ([sample clustered-samples])
+                                          (sqr (- (car sample) (cdr sample)))))))
+            (loop means*))))))
 
 (define (exprs-to-branch-on alts)
   (define critexpr (critical-subexpression (*start-prog*)))
@@ -69,6 +113,8 @@
     (if (null? locs)
         #f
         (critical-child (location-get (car locs) prog)))))
+
+;; =======================================================
 
 (define basic-point-search (curry binary-search (λ (p1 p2)
 						  (if (for/and ([val1 p1] [val2 p2])

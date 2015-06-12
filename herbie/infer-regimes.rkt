@@ -13,11 +13,10 @@
 
 (define (infer-splitpoints alts [axis #f])
   (debug "Finding splitpoints for:" alts #:from 'regime-changes #:depth 2)
-  (let* ([option (option-on-expr alts
-                                 (or axis
-                                     (pick-best-branch-expr
-                                      (*pcontext*) (exprs-to-branch-on alts))))]
-	 [splitpoints (option-splitpoints option)]
+  (let* ([options (map (curry option-on-expr alts)
+		       (if axis (list axis) (exprs-to-branch-on alts)))]
+	 [best-option (argmin (compose errors-score option-errors) options)]
+	 [splitpoints (option-splitpoints best-option)]
 	 [altns (used-alts splitpoints alts)]
 	 [splitpoints* (coerce-indices splitpoints)])
     (debug #:from 'regimes "Found splitpoints:" splitpoints* ", with alts" altns)
@@ -66,9 +65,13 @@
       (let* ([clustered-samples
               (for/list ([x xs])
                 (cons x (argmin (λ (mean) (abs (- mean x))) means)))]
-             [means* (for/list ([mean means])
-                       (let ([cluster-xs (filter (compose (curry equal? mean) cdr) clustered-samples)])
-                         (round (/ (apply + (map car cluster-xs)) (length cluster-xs)))))])
+             [means* (filter
+		      identity
+		      (for/list ([mean means])
+			(let ([cluster-xs (filter (compose (curry equal? mean) cdr) clustered-samples)])
+			  (if (= 0 (length cluster-xs)) #f
+			      (round (/ (apply + (map car cluster-xs))
+					(length cluster-xs)))))))])
         (if (equal? means* means)
             (exact->inexact (/ (apply + (for/list ([sample clustered-samples])
                                           (sqr (- (car sample) (cdr sample)))))))
@@ -76,11 +79,13 @@
 
 (define (exprs-to-branch-on alts)
   (define critexpr (critical-subexpression (*start-prog*)))
-  (define vars (program-variables (alt-program (car alts))))
+  (define var (pick-best-branch-expr
+		(*pcontext*)
+		(program-variables (alt-program (car alts)))))
 
-  (if critexpr
-      (cons critexpr vars)
-      vars))
+  (if (and critexpr (not (equal? critexpr var)))
+      (list critexpr var)
+      (list var)))
 
 (define (critical-subexpression prog)
   (define (loc-children loc subexpr)

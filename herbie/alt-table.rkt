@@ -68,7 +68,7 @@
          [picked (pick altns)]
          [atab* (alt-table-with atab #:alt->done?
                                 (hash-set*+ (alt-table-alt->done? atab)
-                                            (map (curryr list #t) picked)))])
+                                            (map (curryr cons #t) picked)))])
     (values picked atab*)))
 
 (define (atab-peek-alt atab #:picking-func [pick car]

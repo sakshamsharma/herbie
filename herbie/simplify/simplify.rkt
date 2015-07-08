@@ -133,10 +133,6 @@
 	    (when (and (ordinary-float? res) (exact? res))
 	      (enode-override-expr! en res))))))))
 
-(define (hash-set*+ hash assocs)
-  (for/fold ([h hash]) ([assoc assocs])
-    (hash-set h (car assoc) (cdr assoc))))
-
 (define (extract-smallest eg)
   (define (resolve en ens->exprs)
     (let ([possible-resolutions

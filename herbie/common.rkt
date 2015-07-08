@@ -12,7 +12,8 @@
 	 symbol<? *start-prog* html-escape-unsafe
 	 flip-lists argmaxs multipartition
 	 binary-search-floats binary-search-ints binary-search
-         random-exp assert setfindf first-value log2
+         random-exp assert setfindf first-value log2 for/append
+         hash-set*+
          (all-from-out "config.rkt") (all-from-out "debug.rkt"))
 
 (define *start-prog* (make-parameter '()))
@@ -246,3 +247,7 @@
   (apply append
          (for/list ([vars val-lsts] ...)
            bodies ...)))
+
+(define (hash-set*+ hash assocs)
+  (for/fold ([h hash]) ([assoc assocs])
+    (hash-set h (car assoc) (cdr assoc))))

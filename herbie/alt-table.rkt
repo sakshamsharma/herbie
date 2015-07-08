@@ -13,6 +13,9 @@
   (atab-pick-alt (alt-table? #:picking-func ((listof alt?) . -> . alt?)
 			     #:only-fresh boolean?
 			     . -> . (values alt? alt-table?)))
+  (atab-pick-alts (alt-table? #:picking-func ((listof alt?) . -> . (listof alt?))
+                              #:only-fresh boolean?
+                              . -> . (values (listof alt?) alt-table?)))
   (atab-peek-alt (alt-table? #:picking-func ((listof alt?) . -> . alt?)
 			     #:only-fresh boolean?
 			     . -> . (values alt? alt-table?)))

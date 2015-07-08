@@ -24,7 +24,7 @@
 ;; head at once, because then global state is going to mess you up.
 
 (struct shellstate
-  (table next-alt locs children gened-series gened-rewrites simplified samplers)
+  (table next-alts locs children gened-series gened-rewrites simplified samplers)
   #:mutable)
 
 (define ^shell-state^ (make-parameter (shellstate #f #f #f '() #f #f #f #f)))
@@ -35,9 +35,9 @@
 (define (^table^ [newval 'none])
   (when (not (equal? newval 'none))  (set-shellstate-table! (^shell-state^) newval))
   (shellstate-table (^shell-state^)))
-(define (^next-alt^ [newval 'none])
-  (when (not (equal? newval 'none)) (set-shellstate-next-alt! (^shell-state^) newval))
-  (shellstate-next-alt (^shell-state^)))
+(define (^next-alts^ [newval 'none])
+  (when (not (equal? newval 'none)) (set-shellstate-next-alts! (^shell-state^) newval))
+  (shellstate-next-alts (^shell-state^)))
 (define (^children^ [newval 'none])
   (when (not (equal? newval 'none)) (set-shellstate-children! (^shell-state^) newval))
   (shellstate-children (^shell-state^)))
@@ -85,7 +85,7 @@
   (let ([ndone-alts (atab-not-done-alts (^table^))])
     (for ([alt (atab-all-alts (^table^))]
 	  [n (in-naturals)])
-      (println (cond [(equal? alt (^next-alt^)) "+"]
+      (println (cond [(member alt (^next-alts^)) "+"]
 		     [(member alt ndone-alts) "*"]
 		     [#t "x"])
 	       " " n " " alt)))
@@ -97,31 +97,43 @@
       (println "We don't have that many alts!")
       (let-values ([(picked table*) (atab-pick-alt (^table^) #:picking-func (curryr list-ref n)
 						   #:only-fresh #f)])
-	(^next-alt^ picked)
+	(^next-alts^ (list picked))
 	(^table^ table*)
 	(void))))
 
-(define (choose-best-alt!)
-  (let-values ([(picked table*) (atab-pick-alt (^table^) #:picking-func best-alt
-					       #:only-fresh #t)])
-    (^next-alt^ picked)
+(define (choose-best-alts!)
+  (let-values ([(picked table*) (atab-pick-alts (^table^)
+                                                #:picking-func
+                                                (λ (alts)
+                                                  (let* ([best (best-alt alts)]
+                                                         [best-score (errors-score (alt-errors best))])
+                                                    (filter
+                                                     (λ (alt)
+                                                       ((- (errors-score (alt-errors alt)) best-score)
+                                                        . <= . (*pick-threshold*)))
+                                                     alts)))
+                                                #:only-fresh #t)])
+    (^next-alts^ picked)
     (^table^ table*)
     (void)))
 
 ;; Invoke the subsystems individually
 (define (localize!)
-  (^locs^ (localize-error (alt-program (^next-alt^))))
+  (^locs^ (map (compose localize-error alt-program) (^next-alts^)))
   (void))
 
 (define (gen-series!)
   (when ((flag 'generate 'taylor) #t #f)
     (define series-expansions
-      (apply
-       append
-       (for/list ([location (^locs^)]
-                  [n (sequence-tail (in-naturals) 1)])
-         (debug #:from 'progress #:depth 4 "[" n "/" (length (^locs^)) "] generating series at" location)
-         (taylor-alt (^next-alt^) location))))
+      (for/append ([loc-lst (^locs^)]
+                   [alt (^next-alts^)]
+                   [n (in-naturals 1)])
+        (when ((length (^next-alts^)) . > . 1)
+          (debug #:from 'progress #:depth 4 "Generating series for candidate" n))
+        (for/append ([loc loc-lst]
+                     [n (in-naturals 1)])
+          (debug #:from 'progress #:depth 4 "[" n "/" (length (^locs^)) "] generating series at " loc)
+          (taylor-alt alt loc))))
     (^children^ (append (^children^) series-expansions)))
   (^gened-series^ #t)
   (void))
@@ -129,11 +141,15 @@
 (define (gen-rewrites!)
   (define alt-rewrite ((flag 'generate 'rr) alt-rewrite-rm alt-rewrite-expression))
   (define rewritten
-    (apply append
-	   (for/list ([location (^locs^)]
-		      [n (sequence-tail (in-naturals) 1)])
-	     (debug #:from 'progress #:depth 4 "[" n "/" (length (^locs^)) "] rewriting at" location)
-	     (alt-rewrite (alt-add-event (^next-alt^) '(start rm)) #:root location))))
+    (for/append ([loc-lst (^locs^)]
+                 [alt (^next-alts^)]
+                 [n (in-naturals 1)])
+      (when ((length (^next-alts^)) . > . 1)
+        (debug #:from 'progress #:depth 4 "Generating rewrites for candidate" n))
+      (for/append ([loc loc-lst]
+                   [n (in-naturals 1)])
+        (debug #:from 'progress #:depth 4 "[" n "/" (length (^locs^)) "] rewriting at" loc)
+        (alt-rewrite (alt-add-event alt '(start rm)) #:root loc))))
   (^children^
    (append (^children^) rewritten))
   (^gened-rewrites^ #t)
@@ -163,9 +179,9 @@
   (void))
 
 (define (finish-iter!)
-  (when (not (^next-alt^))
+  (when (not (^next-alts^))
     (debug #:from 'progress #:depth 3 "picking best candidate")
-    (choose-best-alt!))
+    (choose-best-alts!))
   (when (not (^locs^))
     (debug #:from 'progress #:depth 3 "localizing error")
     (localize!))
@@ -185,7 +201,7 @@
 (define (rollback-iter!)
   (^children^ '())
   (^locs^ #f)
-  (^next-alt^ #f)
+  (^next-alts^ #f)
   (^gened-rewrites^ #f)
   (^gened-series^ #f)
   (^simplified^ #f)
@@ -198,12 +214,12 @@
 
 ;; Run a complete iteration
 (define (run-iter!)
-  (if (^next-alt^)
+  (if (^next-alts^)
       (begin (println "An iteration is already in progress!")
 	     (println "Finish it up manually, or by running (finish-iter!)")
 	     (println "Or, you can just run (rollback-iter!) to roll it back and start it over."))
       (begin (debug #:from 'progress #:depth 3 "picking best candidate")
-	     (choose-best-alt!)
+	     (choose-best-alts!)
 	     (debug #:from 'progress #:depth 3 "localizing error")
 	     (localize!)
 	     (debug #:from 'progress #:depth 3 "generating series expansions")

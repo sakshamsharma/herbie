@@ -53,3 +53,7 @@
 (define *localize-expressions-limit* (make-parameter 4))
 
 (define *binary-search-test-points* (make-parameter 16))
+
+;; How close the a candidate has to be to the best candidate, in bits
+;; of error, to be picked for improvement.
+(define *pick-threshold* (make-parameter 0.3))

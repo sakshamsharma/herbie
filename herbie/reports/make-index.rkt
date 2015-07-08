@@ -28,11 +28,15 @@
     (match info
       [(report-info date commit branch seed flags points iterations bit-width note tests)
        (define total-gained
-         (for/sum ([row tests])
-           (or (table-row-result row) 0)))
+	 (if tests
+	     (for/sum ([row tests])
+	       (or (table-row-result row) 0))
+	     0))
        (define total-start
-         (for/sum ([row tests])
-           (or (table-row-start row) 0)))
+         (if tests
+	     (for/sum ([row tests])
+	       (or (table-row-start row) 0))
+	     0))
 
        (define (round* x)
          (inexact->exact (round x)))

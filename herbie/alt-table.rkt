@@ -56,6 +56,18 @@
 	 [atab* (alt-table-with atab #:alt->done? (hash-set (alt-table-alt->done? atab) picked #t))])
     (values picked atab*)))
 
+;; This version allows you to pick multiple alts at once. The picking
+;; function should take a list and produce a sub-list. These alts will
+;; be marked as "done", and returned.
+(define (atab-pick-alts atab #:picking-func [pick (compose list car)]
+                        #:only-fresh [only-fresh? #t])
+  (let* ([altns (if only-fresh? (atab-not-done-alts atab) (atab-all-alts atab))]
+         [picked (pick altns)]
+         [atab* (alt-table-with atab #:alt->done?
+                                (hash-set*+ (alt-table-alt->done? atab)
+                                            (map (curryr list #t) picked)))])
+    (values picked atab*)))
+
 (define (atab-peek-alt atab #:picking-func [pick car]
 		       #:only-fresh [only-fresh? #f])
   (pick (if only-fresh?

@@ -101,17 +101,23 @@
 	(^table^ table*)
 	(void))))
 
+(define (pick-alts altns)
+  (let ([groups (multipartition altns (compose localize-error alt-program))])
+    (for/list ([group groups])
+      (argmin (compose errors-score alt-errors) group))))
+
 (define (choose-best-alts!)
   (let-values ([(picked table*) (atab-pick-alts (^table^)
                                                 #:picking-func
                                                 (λ (alts)
                                                   (let* ([best (best-alt alts)]
                                                          [best-score (errors-score (alt-errors best))])
-                                                    (filter
-                                                     (λ (alt)
-                                                       ((- (errors-score (alt-errors alt)) best-score)
-                                                        . <= . (*pick-threshold*)))
-                                                     alts)))
+                                                    (pick-alts
+                                                     (filter
+                                                      (λ (alt)
+                                                        ((- (errors-score (alt-errors alt)) best-score)
+                                                         . <= . (*pick-threshold*)))
+                                                      alts))))
                                                 #:only-fresh #t)])
     (^next-alts^ picked)
     (^table^ table*)

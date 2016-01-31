@@ -26,6 +26,11 @@
 	(error "Could not find a rule by the name" name)
 	(car results))))
 
+; Crude
+(define-ruleset crude (gonzo)
+  [zero               a                    0]
+  [one                a                    1])
+
 ; Commutativity
 (define-ruleset commutivity (arithmetic simplify)
   [+-commutative     (+ a b)               (+ b a)]

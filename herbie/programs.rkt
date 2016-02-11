@@ -181,31 +181,85 @@
 ;; subexpressions.  So, we compile the program to a register machine
 ;; and use that to estimate the cost.
 
-(define (compile expr)
-  (define assignments '())
-  (define compilations (make-hash))
+(define (compile/gvn expr)
+  (define index '())
+  (define names (make-hash))
 
-  ;; TODO : use one of Racket's memoization libraries
   (define (compile-one expr)
-    (hash-ref!
-     compilations expr
+    (hash-update!
+     names expr
+     (λ (rec) (cons (+ 1 (car rec)) (cdr rec)))
      (λ ()
        (let ([expr* (if (list? expr)
 			(let ([fn (car expr)] [children (cdr expr)])
 			  (cons fn (map compile-one children)))
 			expr)]
-	     [register (gensym "r")])
-	 (set! assignments (cons (list register expr*) assignments))
-	 register))))
+	     [name (gensym "r")])
+	 (set! index (cons (list name expr*) index))
+	 (cons 0 name))))
+    (cdr (hash-ref names expr)))
 
   (let ([reg (compile-one expr)])
-    `(let* ,(reverse assignments) ,reg)))
+    (values reg names index)))
+
+(define (compile expr)
+  (define-values (out-reg names index) (compile/gvn expr))
+  `(let* ,(reverse index) ,out-reg))
+
+(define (program->cse expr)
+  (define-values (out-reg names index) (compile/gvn expr))
+  (define index* '())
+
+  (define (lookup reg)
+    (second (assoc reg index)))
+
+  (define (cse! expr)
+    (cond
+     [(not (list? expr)) expr]
+     [else
+      (match-define (cons count name) (hash-ref names expr))
+      (define def (lookup name))
+      (define def* (cons (car expr) (map cse! (cdr expr))))
+      (if (= count 1)
+          def*
+          (begin
+            (set! index* (cons (list name def) index*))
+            name))]))
+
+  (let ([expr* (cse! expr)])
+    (if (not (null? index*))
+        `(let* ,(reverse (remove-duplicates index*)) ,expr*)
+        expr*)))
+
+(define (program->registermachine expr)
+  (define-values (out-reg names index) (compile/gvn expr))
+  (define ranges
+    (let loop ([index index] [live (set out-reg)])
+      (match index
+        ['() '()]
+        [(list (list reg fn) index* ...)
+         (define subreg (if (list? fn) (cdr fn) '()))
+         (cons live (loop index* (foldl (λ (x S) (set-add S x)) (set-remove live reg) subreg)))])))
+  (define registers (make-hash))
+  (define (find-reg reg live)
+    (define num
+      (hash-ref! registers reg
+                 (λ ()
+                   (define used (filter identity (set-map live (λ (x) (hash-ref registers x #f)))))
+                   (for/first ([n (in-naturals)] #:when (not (member n used))) n))))
+    (string->symbol (format "r~a" num)))
+  (for/list ([live (reverse ranges)] [op (reverse index)])
+    (list (find-reg (car op) live)
+          (match (cadr op)
+            [`(,f ,regs ...) (cons f (map (curryr find-reg live) regs))]
+            [val val]))))
 
 (define (program-cost prog)
   (expression-cost (program-body prog)))
 
 (define (expression-cost expr)
-  (for/sum ([step (second (compile expr))])
+  (define-values (out-reg names index) (compile/gvn expr))
+  (for/sum ([step index])
     (if (list? (second step))
         (let ([fn (caadr step)])
           (list-ref (hash-ref (*operations*) fn) mode:cost))

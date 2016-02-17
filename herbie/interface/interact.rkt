@@ -260,6 +260,13 @@
 
 ;; Finishing Herbie
 (define (finalize-table!)
+  ;(define alts (atab-all-alts table))
+  ;(for ([alt alts] [n (in-naturals)])
+  ;  (choose-alt! n)
+  ;  (localize!)
+  ;  (gen-series!)
+  ;  (simplify!)
+  ;  (finalize-iter!))
   (^table^ (post-process (^table^)))
   (void))
 

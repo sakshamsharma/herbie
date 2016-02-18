@@ -242,7 +242,6 @@
 	#:break (atab-completed? (^table^)))
     (debug #:from 'progress #:depth 2 "iteration" iter "/" iters)
     (run-iter!))
-  (finalize-table!)
   (debug #:from 'progress #:depth 1 "[Phase 3 of 3] Extracting.")
   (if get-context?
       (list (get-final-combination) (*pcontext*))
@@ -257,18 +256,6 @@
            (for/list ([x-val marks]) (error-mark x-val))))
 
   (apply herbie-plot renderers))
-
-;; Finishing Herbie
-(define (finalize-table!)
-  ;(define alts (atab-all-alts table))
-  ;(for ([alt alts] [n (in-naturals)])
-  ;  (choose-alt! n)
-  ;  (localize!)
-  ;  (gen-series!)
-  ;  (simplify!)
-  ;  (finalize-iter!))
-  (^table^ (post-process (^table^)))
-  (void))
 
 (define (get-final-combination)
   (begin0

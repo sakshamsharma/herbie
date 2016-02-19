@@ -1,7 +1,6 @@
 #lang racket
 
 (require racket/date)
-(require unstable/sequence)
 (require "../common.rkt")
 (require "datafile.rkt")
 (provide (all-defined-out))
@@ -72,9 +71,9 @@
        ; Scripts: the report script, MathJax, D3, and graph-drawing code
        (printf "<script src='report.js'></script>\n")
        (printf "<script src='http://d3js.org/d3.v3.min.js' charset='utf-8'></script>\n")
-       (printf "<script type='text/javascript' src='graph.js'></script>\n")
+       (printf "<script type='text/javascript' src='arrow-chart.js'></script>\n")
        (printf "</head>\n")
-       (printf "<body>\n")
+       (printf "<body onload='report()'>\n")
 
        ; Big bold numbers
        (printf "<div id='large'>\n")
@@ -162,7 +161,7 @@
                    (if (and inf+ (> inf+ 0)) (format "-~a" inf+) "")))
          (printf "<td>~a</td>" (format-time (table-row-time result)))
          (if (table-row-link result)
-           (printf "<td><a id='link~a' href='~a/graph.html'>more</a></td>" id (table-row-link result))
+           (printf "<td><a id='link~a' href='~a/graph.html'>»</a></td>" id (table-row-link result))
            (printf "<td></td>"))
          (printf "</tr>\n"))
        (printf "</tbody>\n")

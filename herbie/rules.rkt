@@ -3,7 +3,6 @@
 ;; Arithmetic identities for rewriting programs.
 
 (require "common.rkt")
-(require unstable/sequence)
 
 (provide (struct-out rule) *rules* *simplify-rules* get-rule)
 
@@ -140,14 +139,14 @@
 
 (define-ruleset squares-distribute (arithmetic simplify)
   [square-prod       (sqr (* x y))      (* (sqr x) (sqr y))]
-  [square-div        (sqr (/ x y))      (/ (sqr x) (sqr y))])
+  [square-div        (sqr (/ x y))      (/ (sqr x) (sqr y))]
+  [square-mult       (sqr x)            (* x x)])
 
-(define-ruleset squares-transform (arithmetic simplify)
+(define-ruleset squares-transform (arithmetic)
   [sqrt-prod         (sqrt (* x y))     (* (sqrt x) (sqrt y))]
   [sqrt-div          (sqrt (/ x y))     (/ (sqrt x) (sqrt y))]
   [sqrt-unprod       (* (sqrt x) (sqrt y)) (sqrt (* x y))]
   [sqrt-undiv        (/ (sqrt x) (sqrt y)) (sqrt (/ x y))]
-  [square-mult       (sqr x)            (* x x)]
   [add-sqr-sqrt      x                  (sqr (sqrt x))]
   [square-unprod     (* (sqr x) (sqr y)) (sqr (* x y))]
   [square-undiv      (/ (sqr x) (sqr y)) (sqr (/ x y))])

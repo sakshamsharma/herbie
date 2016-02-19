@@ -42,7 +42,7 @@
 (define (make-graph result profile?)
   (match result
     [(test-result test rdir time bits start-alt end-alt points exacts
-                  start-est-error end-est-error newpoints newexacts start-error end-error target-error)
+                  start-est-error end-est-error newpoints newexacts start-error end-error target-error timeline)
      (printf "<!doctype html>\n")
      (printf "<html>\n")
      (printf "<head>")
@@ -53,7 +53,7 @@
              "https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS_HTML")
      (printf "<script src='../report.js'></script>")
      (printf "</head>\n")
-     (printf "<body>\n")
+     (printf "<body onload='graph()'>\n")
 
      (printf "<section id='about'>\n")
 
@@ -67,7 +67,7 @@
 
      (printf "<div id='graphs'>\n")
      (for ([var (test-vars test)] [idx (in-naturals)])
-       (when (> (length newpoints) 2)
+       (when (> (length (remove-duplicates (map (curryr list-ref idx) newpoints))) 1)
          (make-axis newpoints #:axis idx #:out (build-path rdir (format "plot-~a.png" idx)))
          (make-plot start-error newpoints #:axis idx #:color *red-theme*
                     #:out (build-path rdir (format "plot-~ar.png" idx)))
@@ -106,6 +106,8 @@
 
      (printf "<div id='output'>\\(~a\\)</div>\n"
              (texify-expression (program-body (alt-program end-alt))))
+     
+     (output-timeline timeline)
 
      (printf "<ol id='process-info'>\n")
      (parameterize ([*pcontext* (mk-pcontext newpoints newexacts)]
@@ -120,7 +122,7 @@
 
 (define (make-traceback result profile?)
   (match result
-    [(test-failure test bits exn time rdir)
+    [(test-failure test bits exn time rdir timeline)
      (printf "<!doctype html>\n")
      (printf "<html>\n")
      (printf "<head>\n")
@@ -146,6 +148,8 @@
        (printf "<li><code>~a</code> in <code>~a</code></li>\n"
                (html-escape-unsafe (~a (car tb))) (srcloc->string (cdr tb))))
      (printf "</ol>\n")
+
+     (output-timeline timeline)
      
      (printf "<p>Please <a href='https://github.com/uwplse/herbie/issues'>report this bug</a>!</p>\n")
 
@@ -154,7 +158,7 @@
 
 (define (make-timeout result profile?)
   (match result
-    [(test-timeout test bits time rdir)
+    [(test-timeout test bits time rdir timeline)
      (printf "<!doctype html>\n")
      (printf "<html>\n")
      (printf "<head>\n")
@@ -175,6 +179,8 @@
      (printf "</dl>\n")
 
      (printf "<h2>Test timed out</h2>\n")
+
+     (output-timeline timeline)
 
      (printf "</body>\n")
      (printf "</html>\n")]))
@@ -263,6 +269,17 @@
              (texify-expression (program-body (alt-program prev)) #:loc (change-location cng) #:color "red")
              (texify-expression (program-body prog) #:loc (change-location cng) #:color "blue")
              err)]))
+
+(define (output-timeline timeline)
+  (printf "<div class='timeline'>")
+  (for ([curr timeline] [next (cdr timeline)])
+    (printf "<div class='timeline-phase ~a' data-timespan='~a'"
+            (cdr (assoc 'type curr))
+            (- (cdr (assoc 'time next)) (cdr (assoc 'time curr))))
+    (for ([(type value) (in-pairs curr)] #:when (not (member type '(time))))
+      (printf " data-~a='~a'" type value))
+    (printf "></div>"))
+  (printf "</div>\n"))
 
 (define (srcloc->string sl)
   (if sl

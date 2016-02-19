@@ -9,8 +9,6 @@ function load_report() {
     }
 }
 
-window.addEventListener("load", load_report);
-
 function figure_names(figure) {
     var imgs = figure.querySelectorAll("img");
     var names = {};
@@ -48,12 +46,26 @@ function setup_figure(figure) {
     }
 }
 
+function setup_timeline() {
+    var ts = document.getElementsByClassName("timeline-phase");
+    var total_time = 0;
+    for (var i = 0; i < ts.length; i++) {
+        total_time += +ts[i].getAttribute("data-timespan");
+    }
+    for (var i = 0; i < ts.length; i++) {
+        ts[i].style.width = (+ts[i].getAttribute("data-timespan")) / total_time * 100 + "%";
+        ts[i].title = ts[i].getAttribute("data-type");
+    }
+}
+
 function load_graph() {
     var figs = document.querySelectorAll("#graphs figure");
     for (var i = 0; i < figs.length; i++) {
         setup_figure(figs[i]);
     }
+    setup_timeline();
 }
 
-window.addEventListener("load", load_graph);
-
+function report() {load_report();}
+function graph() {load_graph();}
+function index() {load_report();}

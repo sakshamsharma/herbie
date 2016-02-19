@@ -6,15 +6,15 @@
 (require "debug.rkt")
 
 (provide reap define-table println ordinary-float? =-or-nan?
-         enumerate take-up-to argmins list-product alist-append list-join
-         pipe ulp-difference *bit-width* ulps->bits bit-difference
-	 write-file write-string has-duplicates?
-	 symbol<? *start-prog* html-escape-unsafe
+         take-up-to argmins list-product list-join
+         ulp-difference *bit-width* ulps->bits bit-difference
+	 write-file write-string
+	 *start-prog* html-escape-unsafe
 	 flip-lists argmaxs multipartition
 	 binary-search-floats binary-search-ints binary-search
          random-exp assert setfindf first-value log2 for/append
          (all-from-out "config.rkt") (all-from-out "debug.rkt")
-         get-seed set-seed!)
+         get-seed set-seed! in-pairs)
 
 (define *start-prog* (make-parameter '()))
 
@@ -56,30 +56,12 @@
   (or (= x1 x2)
       (and (nan? x1) (nan? x2))))
 
-(define (enumerate #:from [start 0] fun . lsts)
-  (let loop ([idx start] [lsts (apply map list lsts)])
-    (if (null? lsts)
-        '()
-        (cons (apply fun idx (car lsts)) (loop (+ 1 idx) (cdr lsts))))))
-
 (define (take-up-to l k)
   ; This is unnecessarily slow. It is O(l), not O(k).
   ; To be honest, it just isn't that big a deal for now.
   (take l (min k (length l))))
 
-;; Pipes an initial values through a list of funcs.
-(define (pipe initial funcs)
-  ((apply compose (reverse funcs)) initial))
-
-;; A more informative andmap. If any of your results are false, this returns
-;; false. Otherwise, it acts as a normal map.
-(define (info-andmap f l)
-  (let loop ([rest l] [acc '()])
-    (if (null? rest)
-	(reverse acc)
-	(let ([result (f l)])
-	  (and result (loop (cdr rest) (cons result acc)))))))
-
+;; TODO: Replacable by cartesian-product in 6.3+
 (define (list-product . subs)
   (if (null? subs)
       '(())
@@ -105,35 +87,11 @@
 (define (argmaxs f lst)
   (argmins (λ (x) (- (f x))) lst))
 
-(define (alist-append . args)
-  (define (a-append joe bob)
-    (if (null? joe)
-	bob
-	(a-append (cdr joe) (cons
-                             (cons (caar joe)
-                                   (let ([match (assoc (caar joe) bob)])
-                                     (if match
-                                         (append (cdr match) (cdar joe))
-                                         (cdar joe))))
-                             bob))))
-  (if (< 2 (length args))
-      (car args)
-      (foldr (lambda (x y) (a-append x y)) '() args)))
-
 (define-syntax-rule (write-file filename . rest)
    (with-output-to-file filename (lambda () . rest) #:exists 'replace))
 
 (define-syntax-rule (write-string . rest)
   (with-output-to-string (lambda () . rest)))
-
-(define (has-duplicates? lst)
-  (cond [(null? lst) #f]
-	[(member (car lst) (cdr lst)) #t]
-	[#t (has-duplicates? (cdr lst))]))
-
-;; Provide sorting for symbols so that we can canonically order variables and other atoms
-(define (symbol<? sym1 sym2)
-  (string<? (symbol->string sym1) (symbol->string sym2)))
 
 ;; Basically matrix flipping, but for lists. So, if you pass it '((1 2 3) (4 5 6) (7 8 9)),
 ;; it returns '((1 4 7) (2 5 8) (3 6 9)).
@@ -177,6 +135,7 @@
 ;; Takes a list of items, and returns a list of lists of items, where
 ;; the items are grouped by the value produced when key-func is evaluated
 ;; on them.
+;; TODO: Replacable by group-by in 6.3+
 (define (multipartition items key-func)
   (let loop ([rest-items items] [acc '()])
     (if (null? rest-items) (reverse (map (compose reverse cdr) acc))
@@ -203,11 +162,8 @@
        (error 'assert "~a returned false!" 'pred))]))
 
 (define (setfindf f s)
-  (let/ec return
-    (set-for-each s (λ (el)
-		      (when (f el)
-			(return el))))
-    #f))
+  (for/first ([elt (in-set s)] #:when (f elt))
+    elt))
 
 (define (single-flonum->bit-field x)
   (integer-bytes->integer (real->floating-point-bytes x 4) #f))
@@ -259,3 +215,12 @@
   "Reset the random number generator to a new seed"
   (current-pseudo-random-generator
    (vector->pseudo-random-generator seed)))
+
+(define (in-pairs seq)
+  "Given a sequence of pairs, returns a sequence of their cars and cdrs."
+  ;; This code is pretty confusing; the sequence APIs are not good
+  (define-values (more? next) (sequence-generate seq))
+  (define stop? #f)
+  (in-producer
+   (λ () (if stop? (values #f #f) (let ([x (next)]) (values (car x) (cdr x)))))
+   (λ _ (begin0 stop? (set! stop? (not (more?)))))))

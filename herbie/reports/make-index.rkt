@@ -1,11 +1,10 @@
 #lang racket
 
 (require racket/date)
-(require unstable/sequence)
 (require "../common.rkt")
 (require "datafile.rkt")
 
-(provide read-report-info)
+(provide read-report-info name->timestamp)
 
 (define (parse-folder-name name)
   (let ([name (path->string name)])
@@ -28,12 +27,14 @@
   (list-ref (string-split "Jan Feb Mar Apr May Jun Jul Aug Sept Oct Nov Dec") (- i 1)))
 
 (define (date->string/short date)
-  (format "~a ~a"
+  (format "~a ~a, ~a:~a"
           (month->string (date-month date))
-          (~r (date-day date) #:min-width 2 #:pad-string "0")))
+          (~r (date-day date) #:min-width 2 #:pad-string "0")
+          (~r (date-hour date) #:min-width 2 #:pad-string "0")
+          (~r (date-minute date) #:min-width 2 #:pad-string "0")))
 
 (define (print-rows infos #:name name)
-  (printf "<thead id='reports-~a'><th>Date</th><th>Branch</th><th>Tests</th><th>Bits</th><th>Note</th></thead>\n" name)
+  (printf "<thead id='reports-~a' data-branch='~a'><th>Date</th><th>Branch</th><th>Collection</th><th>Tests</th><th>Bits</th></thead>\n" name name)
   (printf "<tbody>\n")
   (for ([(folder info) (in-pairs infos)])
     (match-define (report-info date commit branch seed flags points iterations bit-width note tests) info)
@@ -61,20 +62,22 @@
         (~r x #:precision 2)]))
 
     (printf "<tr>")
-    (printf "<td title='~a:~a on ~a'>~a</td>"
+    (printf "<td title='~a:~a on ~a'><time data-unix='~a'>~a</time></td>"
             (date-hour date) (~r (date-minute date) #:min-width 2 #:pad-string "0")
-            (date->string date) (date->string/short date))
+            ;; TODO: Best to output a datetime field in RFC3338 format,
+            ;; but Racket doesn't make that easy.
+            (date->string date) (date->seconds date) (date->string/short date))
     (printf "<td title='~a'>~a</td>" commit branch)
+    (if note
+        (printf "<td class='note'>~a</td>" note)
+        (printf "<td>⭐</td>"))
     (if tests
         (printf "<td>~a/~a</td>" total-passed total-available)
         (printf "<td></td>"))
     (if (> total-start 0)
         (printf "<td>~a/~a</td>" (round* (- total-start total-end)) (round* total-start))
         (printf "<td></td>"))
-    (if note
-        (printf "<td><span class='note' title='~a'>⭐</span></td>" note)
-        (printf "<td></td>"))
-    (printf "<td><a href='./~a/report.html'>more</a></td>" folder)
+    (printf "<td><a href='./~a/report.html'>»</a></td>" folder)
     (printf "</tr>\n"))
   (printf "</tbody>\n"))
 
@@ -92,9 +95,11 @@
       (printf "<head>")
       (printf "<meta charset='utf-8' /><title>Herbie Reports</title>\n")
       (printf "<link rel='stylesheet' href='index.css' />\n")
+      (printf "<script src='http://d3js.org/d3.v3.min.js' charset='utf-8'></script>\n")
+      (printf "<script src='regression-chart.js'></script>\n")
       (printf "<script src='report.js'></script>\n")
       (printf "</head>\n")
-      (printf "<body>\n")
+      (printf "<body onload='index()'>\n")
 
       (define branch-infos*
         (sort
@@ -125,6 +130,11 @@
         (define branch (report-info-branch (cdar rows)))
         (printf "<li><a href='#reports-~a'>~a</a></li>" branch branch))
       (printf "</ul>")
+
+      (printf "<figure><svg id='graph' width='800'></svg>\n")
+      (printf "<ul id='suites'></ul>")
+      (printf "<script>window.addEventListener('load', function(){draw_results(d3.select('#graph'))})</script>\n")
+      (printf "</figure>\n")
 
       (printf "<table id='reports'>\n")
       (print-rows master-info #:name "master")

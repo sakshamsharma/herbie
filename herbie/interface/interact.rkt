@@ -199,6 +199,15 @@
   (finalize-iter!)
   (void))
 
+(define (simplify-table!)
+  (when ((flag 'reduce 'simplify) #t #f)
+    (define alts (atab-all-alts (^table^)))
+    (define log! (timeline-event! 'simplify))
+    (define alts* (map completely-simplify-alt alts))
+    (set! log! (timeline-event! 'prune))
+    (^table^ (atab-add-altns (^table^) alts*)))
+  (void))
+
 (define (rollback-iter!)
   (^children^ '())
   (^locs^ #f)
@@ -242,6 +251,7 @@
 	#:break (atab-completed? (^table^)))
     (debug #:from 'progress #:depth 2 "iteration" iter "/" iters)
     (run-iter!))
+  (simplify-table!)
   (debug #:from 'progress #:depth 1 "[Phase 3 of 3] Extracting.")
   (if get-context?
       (list (get-final-combination) (*pcontext*))

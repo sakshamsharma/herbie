@@ -15,7 +15,7 @@
    #hash([precision . (double)]
          [setup    . (simplify)]
          [generate . (rr taylor simplify)]
-         [reduce   . (regimes avg-error)]
+         [reduce   . (regimes simplify avg-error)]
          [rules . (arithmetic polynomials fractions exponents trigonometry)])))
 
 (define (toggle-flag! category flag)

@@ -24,7 +24,7 @@ function run {
       --note "$2" \
       --profile \
       --threads 4 \
-      --option setup:simply \
+      --option setup:simplify \
       "$1"
   make publish
 }

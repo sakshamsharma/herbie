@@ -24,6 +24,7 @@ function run {
       --note "$2" \
       --profile \
       --threads 4 \
+      --option setup:simply \
       "$1"
   make publish
 }
@@ -32,7 +33,7 @@ for b in $HERBROOT/bench/*; do
   name=$(basename "$b" .rkt)
   # skip some massive or misbehaving benchmarks
   case $name in
-    haskell|mathematics|numerics|regression)
+    haskell|mathematics|numerics)
       continue
       ;;
   esac

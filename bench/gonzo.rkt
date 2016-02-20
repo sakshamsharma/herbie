@@ -1,5 +1,5 @@
 (lambda (x)
-  #:name "complicated zero"
+  #:name "zero or two"
   (- (/ x x) (* (/ 1 x) (sqrt (* x x)))))
 
 (lambda (r d)

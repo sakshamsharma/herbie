@@ -27,8 +27,10 @@
 
 ; Crude
 (define-ruleset crude (gonzo)
+  [gonzo--1          a                    -1]
   [gonzo-0           a                     0]
-  [gonzo-1           a                     1])
+  [gonzo-1           a                     1]
+  [gonzo-2           a                     2])
 
 ; Commutativity
 (define-ruleset commutivity (arithmetic simplify)

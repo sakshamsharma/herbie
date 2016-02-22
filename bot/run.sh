@@ -25,6 +25,8 @@ function run {
       --profile \
       --threads 4 \
       --option setup:simplify \
+      --option generate:simplify \
+      --option generate:taylor \
       "$1"
   make publish
 }

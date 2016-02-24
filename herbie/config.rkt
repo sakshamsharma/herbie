@@ -16,7 +16,7 @@
          [setup    . (simplify)]
          [generate . (rr taylor simplify)]
          [reduce   . (regimes taylor simplify avg-error)]
-         [rules . (arithmetic polynomials fractions exponents trigonometry)])))
+         [rules . (arithmetic polynomials fractions exponents trigonometry gonzo)])))
 
 (define (toggle-flag! category flag)
   (*flags*

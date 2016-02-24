@@ -123,7 +123,7 @@
 ;; Invoke the subsystems individually
 (define (localize!)
   (define log! (timeline-event! 'localize))
-  (^locs^ (localize-error (alt-program (^next-alt^))))
+  (^locs^ (cons (list 2) (localize-error (alt-program (^next-alt^)))))
   (void))
 
 (define (gen-series!)

@@ -9,7 +9,8 @@
          location-induct program-induct expression-induct location-hash
          location-do location-get location-parent location-sibling
          eval-prog replace-subexpr
-         compile expression-cost program-cost
+         compile program->cse program->register-machine
+         expression-cost program-cost
          free-variables unused-variables replace-expression valid-program?
          eval-exact eval-const-expr
          desugar-program)
@@ -242,11 +243,9 @@
             name))]))
 
   (let ([expr* (cse! expr)])
-    (if (not (null? index*))
-        `(let* ,(reverse (remove-duplicates index*)) ,expr*)
-        expr*)))
+    `(let* ,(reverse (remove-duplicates index*)) ,expr*)))
 
-(define (program->registermachine expr)
+(define (program->register-machine expr)
   (define-values (out-reg names index) (compile/gvn expr))
   (define ranges
     (let loop ([index index] [live (set out-reg)])
@@ -263,11 +262,12 @@
                    (define used (filter identity (set-map live (λ (x) (hash-ref registers x #f)))))
                    (for/first ([n (in-naturals)] #:when (not (member n used))) n))))
     (string->symbol (format "r~a" num)))
-  (for/list ([live (reverse ranges)] [op (reverse index)])
-    (list (find-reg (car op) live)
-          (match (cadr op)
-            [`(,f ,regs ...) (cons f (map (curryr find-reg live) regs))]
-            [val val]))))
+  (cons out-reg
+        (for/list ([live (reverse ranges)] [op (reverse index)])
+          (list (find-reg (car op) live)
+                (match (cadr op)
+                  [`(,f ,regs ...) (cons f (map (curryr find-reg live) regs))]
+                  [val val])))))
 
 (define (program-cost prog)
   (expression-cost (program-body prog)))

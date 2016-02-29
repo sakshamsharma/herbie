@@ -25,8 +25,8 @@
   [abs      "fabs(~a)"]
   [sqrt     "sqrt(~a)"]
   [hypot    "hypot(~a, ~a)"]
-  [sqr      (lambda (x) (format "~a * ~a" x x))]
-  [cube     (lambda (x) (format "~a * (~a * ~a)" x x x))]
+  [sqr      (λ (x) (format "~a * ~a" x x))]
+  [cube     (λ (x) (format "~a * (~a * ~a)" x x x))]
   [exp      "exp(~a)"]
   [expm1    "expm1(~a)"]
   [expt     "pow(~a, ~a)"]
@@ -64,44 +64,50 @@
 (define (if? l)
   (and (list? l) (eq? (car l) 'if)))
 
+(define (if->c expr)
+  (match-define `(if ,cond ,ift ,iff) expr)
+  (format "(~a ? ~a : ~a)" (expr->c cond) (expr->c ift) (expr->c iff)))
+
+(define (value->c expr)
+  (cond
+   [(member expr constants) (apply-converter (car (hash-ref constants->c expr)) '())]
+   [(symbol? expr) (fix-name expr)]
+   [(number? expr) (real->double-flonum expr)]
+   [else (error "Invalid value" expr)]))
+
+(define (app->c expr)
+  (if (list? expr)
+      (let* ([rec (list-ref (hash-ref operators->c (car expr)) 0)]
+             [args (map app->c (cdr expr))])
+        (apply-converter rec args))
+      (value->c expr)))
+
+(define (expr->c expr)
+  (match expr
+    [`(if ,cond ,ift ,iff) (if->c expr)]
+    [_ (app->c expr)]))
+
 (define (program->c prog [type "double"] [fname "f"])
-  (define vars (program-variables prog))
+  (define bound-vars (program-variables prog))
   (define unused-vars (unused-variables prog))
-  (define body (compile (program-body prog)))
 
-  (define (value->c expr)
-    (cond
-     [(member expr vars) (fix-name expr)]
-     [(member expr constants) (apply-converter (car (hash-ref constants->c expr)) '())]
-     [(symbol? expr) expr]
-     [else (real->double-flonum (->flonum expr))]))
+  (match-define
+   `(let* ([,vars ,vals] ...) ,retexpr)
+   (program->cse (program-body prog)))
 
-  (define (app->c expr)
-    (if (list? expr)
-        (let* ([rec (list-ref (hash-ref operators->c (car expr)) 0)]
-               [args (map value->c (cdr expr))])
-          (apply-converter rec args))
-        (value->c expr)))
+  (define var-declarations
+    (for/list ([var bound-vars])
+      (if (member var unused-vars)
+          (format "~a __attribute__((unused)) ~a" type (fix-name var))
+          (format "~a ~a" type (fix-name var)))))
 
-  (write-string
-    (let ([pdecls
-            (for/list ([var vars])
-                      (if (member var unused-vars)
-                        (format "~a __attribute__((unused)) ~a" type (fix-name var))
-                        (format "~a ~a" type (fix-name var))))])
-      (printf "double ~a(~a) {\n" ; TODO shouldn't "double" here be type ?
-              fname
-              (string-join pdecls ", ")))
+  (printf "double ~a(~a) {\n" fname (string-join var-declarations ", "))
 
-   (for/list ([assignment (cadr body)])
-     (if (comparison? (cadr assignment))
-         (printf "        bool ~a = ~a;\n" (car assignment)
-                 (app->c (cadr assignment)))
-         (printf "        ~a ~a = ~a;\n" type (car assignment)
-                 (app->c (cadr assignment)))))
-
-   (printf "        return ~a;\n" (value->c (caddr body)))
-   (printf "}\n\n")))
+  (for ([var vars] [val vals])
+    (define type* (if (comparison? (car val)) 'bool type))
+    (printf "        ~a ~a = ~a;\n" type* var (app->c val)))
+  (printf "        return ~a;\n" (app->c retexpr))
+  (printf "}\n\n"))
 
 (define-table operators->mpfr
   [+        "mpfr_add(~a, ~a, ~a, MPFR_RNDN)"]
@@ -151,9 +157,10 @@
   [e     (λ (x) (format "mpfr_set_si(~a, 1, MPFR_RNDN); mpfr_exp(~a, ~a, MPFR_RNDN);" x x x))])
 
 (define (program->mpfr prog [bits 128] [fname "f"])
-  (define vars (program-variables prog))
+  (define bound-vars (program-variables prog))
   (define unused-vars (unused-variables prog))
-  (define body (compile (program-body prog)))
+  (match-define (list out body ...) (program->register-machine (program-body prog)))
+  (define registers (remove-duplicates (map car body)))
 
   (define (app->mpfr out expr)
     (cond
@@ -161,8 +168,9 @@
       (let* ([rec (list-ref (hash-ref operators->mpfr (car expr)) 0)]
              [args (cdr expr)])
         (apply-converter rec (cons out args)))]
-     [(number? expr) ""]
-     [(member expr vars)
+     [(number? expr)
+      (format "mpfr_set_d(~a, ~a, MPFR_RNDN)" out expr)]
+     [(member expr bound-vars)
       (format "mpfr_set_d(~a, ~a, MPFR_RNDN)" out (fix-name expr))]
      [(member expr constants)
       (apply-converter (car (hash-ref constants->mpfr expr)) (list out))]
@@ -170,32 +178,28 @@
       (format "mpfr_set(~a, ~a, MPFR_RNDN)" out expr)]))
 
   (write-string
-   (printf "static mpfr_t ~a;\n\n" (string-join (map symbol->string (map car (cadr body))) ", "))
+   (printf "static mpfr_t ~a;\n\n" (string-join (map ~a registers) ", "))
 
    (printf "void setup_mpfr_~a() {\n" fname)
    ; Some guard bits added, just in case
    (printf "        mpfr_set_default_prec(~a);\n" (+ bits 16))
-   (for ([reg (cadr body)])
-     (if (number? (cadr reg))
-         (printf "        mpfr_init_set_str(~a, \"~a\", 10, MPFR_RNDN);\n" (car reg) (cadr reg))
-         (printf "        mpfr_init(~a);\n" (car reg))))
+   (for ([reg registers])
+     (printf "        mpfr_init(~a);\n" reg))
    (printf "}\n\n")
 
-   (let ([pdecls
-           (for/list ([var vars])
-                     (if (member var unused-vars)
-                       (format "double __attribute__((unused)) ~a" (fix-name var))
-                       (format "double ~a" (fix-name var))))])
-     (printf "double ~a(~a) {\n"
-             fname
-             (string-join pdecls ", ")))
+   (define var-declarations
+     (for/list ([var bound-vars])
+       (if (member var unused-vars)
+           (format "double __attribute__((unused)) ~a" (fix-name var))
+           (format "double ~a" (fix-name var)))))
 
-   (for ([assignment (cadr body)])
+   (printf "double ~a(~a) {\n" fname (string-join var-declarations ", "))
+
+   (for ([assignment body])
      (printf "        ~a;\n" (app->mpfr (car assignment) (cadr assignment))))
 
-
-  (printf "        return mpfr_get_d(~a, MPFR_RNDN);\n" (caddr body))
-  (printf "}\n\n")))
+   (printf "        return mpfr_get_d(~a, MPFR_RNDN);\n" out)
+   (printf "}\n\n")))
 
 (define (compile-all name iprog fprog dprog bits)
   (printf "#include <tgmath.h>\n")

@@ -9,9 +9,9 @@
          location-induct program-induct expression-induct location-hash
          location-do location-get location-parent location-sibling
          eval-prog replace-subexpr
-	 compile expression-cost program-cost
-         free-variables replace-expression valid-program?
-         eval-exact
+         compile expression-cost program-cost
+         free-variables unused-variables replace-expression valid-program?
+         eval-exact eval-const-expr
          desugar-program)
 
 (define (location-induct
@@ -31,15 +31,13 @@
 	(toplevel `(λ ,(program-variables prog) ,body*) (reverse location)))]
      [(and (list? prog) (memq (car prog) predicates))
       (predicate (cons (symbol-table (car prog) (reverse (cons 0 location)))
-		       (enumerate #:from 1
-				  (λ (idx prog) (inductor prog (cons idx location)))
-				  (cdr prog)))
+                       (for/list ([idx (in-naturals)] [arg prog] #:when (> idx 0))
+                         (inductor arg (cons idx location))))
 		 (reverse location))]
      [(list? prog)
       (primitive (cons (symbol-table (car prog) (reverse (cons 0 location)))
-		       (enumerate #:from 1
-                                  (λ (idx prog) (inductor prog (cons idx location)))
-                                  (cdr prog)))
+                       (for/list ([idx (in-naturals)] [arg prog] #:when (> idx 0))
+                         (inductor arg (cons idx location))))
 		 (reverse location))]))
   (inductor prog '()))
 
@@ -87,17 +85,30 @@
 
   (inductor prog))
 
-(define (free-variables prog [bound constants])
-  (filter (λ (v) (not (member v bound)))
-          (match prog
-            [(? constant?) '()]
-            [(? variable?) (list prog)]
-            [`(λ ,vars ,body)
-             (free-variables body (append vars constants))]
-            [`(lambda ,vars ,body)
-             (free-variables body (append vars constants))]
-            [`(,f ,args ...)
-             (remove-duplicates (append-map (curryr free-variables bound) args))])))
+;; (define (free-variables prog [bound constants])
+;;   (filter (λ (v) (not (member v bound)))
+;;           (match prog
+;;             [(? constant?) '()]
+;;             [(? variable?) (list prog)]
+;;             [`(λ ,vars ,body)
+;;              (free-variables body (append vars constants))]
+;;             [`(lambda ,vars ,body)
+;;              (free-variables body (append vars constants))]
+;;             [`(,f ,args ...)
+;;              (remove-duplicates (append-map (curryr free-variables bound) args))])))
+
+(define (free-variables prog)
+  (match prog
+         [(? constant?) '()]
+         [(? variable?) (list prog)]
+         [`(lambda ,vars ,body)
+           (remove* vars (free-variables body))]
+         [`(,op ,args ...) ; TODO what if op unbound?
+           (remove-duplicates (append-map free-variables args))]))
+
+(define (unused-variables prog)
+  (remove* (free-variables (program-body prog))
+           (program-variables prog)))
 
 (define (valid-program? prog)
   (define (valid-expression? expr vars)
@@ -171,10 +182,14 @@
 ;; the results back to floats.
 (define (eval-exact prog)
   (let* ([prog* (program-induct prog #:constant ->bf #:symbol real-op->bigfloat-op)]
-         [prog-opt `(λ ,(program-variables prog*) ,(compile (program-body prog*)))]
+         [prog-opt `(lambda ,(program-variables prog*) ,(compile (program-body prog*)))]
          [fn (eval prog-opt common-eval-ns)])
-    (λ (pts)
+    (lambda (pts)
       (apply fn (map ->bf pts)))))
+
+(define (eval-const-expr expr)
+  (let* ([expr_bf (expression-induct expr '() #:constant ->bf #:symbol real-op->bigfloat-op)])
+    (->flonum (eval expr_bf common-eval-ns))))
 
 ;; To compute the cost of a program, we could use the tree as a
 ;; whole, but this is inaccurate if the program has many common

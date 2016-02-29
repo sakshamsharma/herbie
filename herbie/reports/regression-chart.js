@@ -10,8 +10,8 @@ key = undefined;
 used_branch = {};
 
 function get_point(tr) {
-    var tests = tr.children[2].textContent.split("/");
-    var bits = tr.children[3].textContent.split("/");
+    var tests = tr.children[3].textContent.split("/");
+    var bits = tr.children[4].textContent.split("/");
     
     return {
         tests: { got: +tests[0], total: +tests[1]},
@@ -27,7 +27,7 @@ function get_data(tag, table) {
     var data = [];
     for (var i = 0; i < trs.length; i++) {
         var note = trs[i].getElementsByClassName("note")[0];
-        var trtag = note && note.title;
+        var trtag = note && note.textContent;
         if (trtag) used_branch[trs[i].children[1].textContent] = true;
         if (trtag == tag) data.push(get_point(trs[i]));
     }
@@ -146,7 +146,7 @@ function draw_results(node) {
     var types = {};
     var notes = document.getElementsByClassName("note");
     for (var i = 0; i < notes.length; i++) {
-        types[notes[i].title] = (types[notes[i].title] || 0) + 1;
+        types[notes[i].textContent] = (types[notes[i].textContent] || 0) + 1;
     }
 
     var best_type = null;

@@ -172,10 +172,10 @@
             ; Everything is terrible
             (reduce-children
               (apply list-product ; (list (list ((list cng) * bnd)))
-                (enumerate #:from 1 ; (list (list ((list cng) * bnd)))
-                 ; Note: we reset the fuel to "depth", not "cdepth"
-                 (λ (i x) (matcher (car x) (cdr x) (cons i loc) depth)) ; (expr * pattern) nat -> (list (list cng))
-                 (map cons (cdr expr) (cdr pattern))))) ; list (expr * pattern)
+                     (for/list ([i (in-naturals)] [sube expr] [subp pattern]
+                                #:when (> i 0)) ; (list (list ((list cng) * bnd)))
+                       ;; Note: we reset the fuel to "depth", not "cdepth"
+                       (matcher sube subp (cons i loc) depth)))) ; list (expr * pattern)
             (if (> cdepth 0)
                 ; Sort of a brute force approach to getting the bindings
                 (fix-up-variables
@@ -205,5 +205,5 @@
     (location-do loc prog (λ (expr) (pattern-substitute template bnd)))))
 
 (define (changes-apply chngs prog)
-  (pipe prog (map (λ (chng) (curry change-apply chng))
-		  chngs)))
+  (for/fold ([prog prog]) ([chng chngs])
+    (change-apply chng prog)))

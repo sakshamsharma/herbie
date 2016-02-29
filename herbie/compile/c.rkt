@@ -25,7 +25,8 @@
   [abs      "fabs(~a)"]
   [sqrt     "sqrt(~a)"]
   [hypot    "hypot(~a, ~a)"]
-  [sqr      (λ (x) (format "~a * ~a" x x))]
+  [sqr      (lambda (x) (format "~a * ~a" x x))]
+  [cube     (lambda (x) (format "~a * (~a * ~a)" x x x))]
   [exp      "exp(~a)"]
   [expm1    "expm1(~a)"]
   [expt     "pow(~a, ~a)"]
@@ -49,7 +50,9 @@
   [>=       "~a >= ~a"]
   [and      "~a && ~a"]
   [or       "~a || ~a"]
-  [mod      "fmod2(~a, ~a)"])
+  [mod      "fmod(~a, ~a)"]
+  [fma      "fma(~a, ~a, ~a)"]
+  [cbrt     "cbrt(~a)"])
 
 (define-table constants->c
   [pi    "atan2(1.0, 0.0)"]
@@ -63,6 +66,7 @@
 
 (define (program->c prog [type "double"] [fname "f"])
   (define vars (program-variables prog))
+  (define unused-vars (unused-variables prog))
   (define body (compile (program-body prog)))
 
   (define (value->c expr)
@@ -80,8 +84,14 @@
         (value->c expr)))
 
   (write-string
-   (printf "double ~a(~a) {\n" fname
-           (string-join (for/list ([var vars]) (format "~a ~a" type (fix-name var))) ", "))
+    (let ([pdecls
+            (for/list ([var vars])
+                      (if (member var unused-vars)
+                        (format "~a __attribute__((unused)) ~a" type (fix-name var))
+                        (format "~a ~a" type (fix-name var))))])
+      (printf "double ~a(~a) {\n" ; TODO shouldn't "double" here be type ?
+              fname
+              (string-join pdecls ", ")))
 
    (for/list ([assignment (cadr body)])
      (if (comparison? (cadr assignment))
@@ -101,7 +111,11 @@
   [abs      "mpfr_abs(~a, ~a, MPFR_RNDN)"]
   [sqrt     "mpfr_sqrt(~a, ~a, MPFR_RNDN)"]
   [hypot    "mpfr_hypot(~a, ~a, ~a, MPFR_RNDN)"]
-  [sqr      (λ (x y) (format "mpfr_mul(~a, ~a, ~a, MPFR_RNDN)" x y y))]
+  [sqr      "mpfr_sqr(~a, ~a, MPFR_RNDN)"]
+  [cube     (λ (x y)
+               (format
+                 "mpfr_mul(~a, ~a, ~a, MPFR_RNDN); mpfr_mul(~a, ~a, ~a, MPFR_RNDN)"
+                 x y y x x y))]
   [exp      "mpfr_exp(~a, ~a, MPFR_RNDN)"]
   [expm1    "mpfr_expm1(~a, ~a, MPFR_RNDN)"]
   [expt     "mpfr_pow(~a, ~a, ~a, MPFR_RNDN)"]
@@ -117,7 +131,7 @@
   [sinh     "mpfr_sinh(~a, ~a, MPFR_RNDN)"]
   [cosh     "mpfr_cosh(~a, ~a, MPFR_RNDN)"]
   [tanh     "mpfr_tanh(~a, ~a, MPFR_RNDN)"]
-  [if       (λ (r c a b)
+  [if       (lambda (r c a b)
                (format
                 "if (mpfr_get_si(~a, MPFR_RNDN)) { mpfr_set(~a, ~a, MPFR_RNDN); } else { mpfr_set(~a, ~a, MPFR_RNDN); }"
                 c r a r b))]
@@ -128,7 +142,9 @@
   [and      "mpfr_set_si(~a, mpfr_get_si(~a, MPFR_RNDN) && mpfr_get_si(~a, MPFR_RNDN), MPFR_RNDN)"]
   [or       "mpfr_set_si(~a, mpfr_get_si(~a, MPFR_RNDN) || mpfr_get_si(~a, MPFR_RNDN), MPFR_RNDN)"]
   [atan2    "mpfr_atan2(~a, ~a, ~a, MPFR_RNDN)"]
-  [mod      "mpfr_fmod2(~a, ~a, ~a)"])
+  [mod      "mpfr_fmod2(~a, ~a, ~a, MPFR_RNDN)"]
+  [fma      "mpfr_fma(~a, ~a, ~a, ~a, MPFR_RNDN)"]
+  [cbrt     "mpfr_cbrt(~a, ~a, MPFR_RNDN)"])
 
 (define-table constants->mpfr
   [pi    "mpfr_const_pi(~a, MPFR_RNDN)"]
@@ -136,6 +152,7 @@
 
 (define (program->mpfr prog [bits 128] [fname "f"])
   (define vars (program-variables prog))
+  (define unused-vars (unused-variables prog))
   (define body (compile (program-body prog)))
 
   (define (app->mpfr out expr)
@@ -145,7 +162,7 @@
              [args (cdr expr)])
         (apply-converter rec (cons out args)))]
      [(number? expr) ""]
-     [(member expr (program-variables prog))
+     [(member expr vars)
       (format "mpfr_set_d(~a, ~a, MPFR_RNDN)" out (fix-name expr))]
      [(member expr constants)
       (apply-converter (car (hash-ref constants->mpfr expr)) (list out))]
@@ -164,8 +181,14 @@
          (printf "        mpfr_init(~a);\n" (car reg))))
    (printf "}\n\n")
 
-   (printf "double ~a(~a) {\n" fname
-           (string-join (for/list ([var vars]) (format "double ~a" (fix-name var))) ", "))
+   (let ([pdecls
+           (for/list ([var vars])
+                     (if (member var unused-vars)
+                       (format "double __attribute__((unused)) ~a" (fix-name var))
+                       (format "double ~a" (fix-name var))))])
+     (printf "double ~a(~a) {\n"
+             fname
+             (string-join pdecls ", ")))
 
    (for ([assignment (cadr body)])
      (printf "        ~a;\n" (app->mpfr (car assignment) (cadr assignment))))
@@ -216,7 +239,7 @@
   (require "../config.rkt")
 
   (define dir report-output-path)
-  
+
   (command-line
    #:program "compile/c.rkt"
    #:once-each

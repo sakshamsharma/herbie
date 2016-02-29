@@ -174,7 +174,7 @@
   (let* ([real->precision (if (equal? mode mode:bf) ->bf ->flonum)]
          [op->precision (λ (op) (list-ref (hash-ref (*operations*) op) mode))]
          [prog* (program-induct prog #:constant real->precision #:symbol op->precision)]
-         [prog-opt `(λ ,(program-variables prog*) ,(compile (program-body prog*)))]
+         [prog-opt `(λ ,(program-variables prog*) ,(program->cse (program-body prog*)))]
          [fn (eval prog-opt common-eval-ns)])
     (lambda (pts)
       (->flonum (apply fn (map real->precision pts))))))
@@ -183,7 +183,7 @@
 ;; the results back to floats.
 (define (eval-exact prog)
   (let* ([prog* (program-induct prog #:constant ->bf #:symbol real-op->bigfloat-op)]
-         [prog-opt `(lambda ,(program-variables prog*) ,(compile (program-body prog*)))]
+         [prog-opt `(lambda ,(program-variables prog*) ,(program->cse (program-body prog*)))]
          [fn (eval prog-opt common-eval-ns)])
     (lambda (pts)
       (apply fn (map ->bf pts)))))
@@ -218,10 +218,6 @@
   (let ([reg (compile-one expr)])
     (values reg names index)))
 
-(define (compile expr)
-  (define-values (out-reg names index) (compile/gvn expr))
-  `(let* ,(reverse index) ,out-reg))
-
 (define (program->cse expr)
   (define-values (out-reg names index) (compile/gvn expr))
   (define index* '())
@@ -239,7 +235,7 @@
       (if (= count 1)
           def*
           (begin
-            (set! index* (cons (list name def) index*))
+            (set! index* (cons (list name def*) index*))
             name))]))
 
   (let ([expr* (cse! expr)])

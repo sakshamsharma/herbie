@@ -66,5 +66,7 @@
     (*mk-prog* #t)]
    [("-n" "--num-points") num-pts "How many points to use"
     (*num-pts* (string->number num-pts))]
+   [("-r" "--seed") seed "What random seed to sample points with (--pts only)."
+    (set-seed! (read (open-input-string seed)))]
    #:args (bench-file-or-dir output-prefix)
    (compile-single bench-file-or-dir output-prefix)))

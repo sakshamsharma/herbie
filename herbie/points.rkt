@@ -145,9 +145,8 @@
     (for/list ([(point exact) (in-pcontext pcontext)])
       (let ([out (fn point)])
 	(add1
-	 (if (ordinary-float? out)
-	     (abs (ulp-difference out exact))
-	     max-ulps))))))
+	 (if (nan? out) max-ulps
+	     (abs (ulp-difference out exact))))))))
 
 (define (errors-score e)
   (let-values ([(reals unreals) (partition ordinary-float? e)])

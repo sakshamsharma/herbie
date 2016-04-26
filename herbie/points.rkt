@@ -145,7 +145,7 @@
     (for/list ([(point exact) (in-pcontext pcontext)])
       (let ([out (fn point)])
 	(add1
-	 (if (real? out)
+	 (if (ordinary-float? out)
 	     (abs (ulp-difference out exact))
 	     max-ulps))))))
 

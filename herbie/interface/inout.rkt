@@ -31,8 +31,8 @@
         (when (not (= in-ans out-ans))
           (printf "; sample ~a exact ~a input ~a output ~a improvement ~a\n"
                   pt ex in-ans out-ans
-                  (- (bit-difference ex in-ans)
-                     (bit-difference ex out-ans)))))))
+                  (- (bit-error ex in-ans)
+                     (bit-error ex out-ans)))))))
   (printf "~a\n" (alt-program out-alt)))
 
 (module+ main

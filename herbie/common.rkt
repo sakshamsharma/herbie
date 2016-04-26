@@ -9,6 +9,7 @@
          take-up-to argmins list-product list-join
          common-eval-ns common-eval
          ulp-difference *bit-width* ulps->bits bit-difference
+         bit-error
          write-file write-string
          *start-prog* html-escape-unsafe
          flip-lists argmaxs multipartition
@@ -189,6 +190,10 @@
 
 (define (bit-difference x y)
   (ulps->bits (+ 1 (abs (ulp-difference x y)))))
+
+(define (bit-error in out)
+  (if (nan? out) (*bit-width*)
+      (ulps->bits (add1 (abs (ulp-difference in out))))))
 
 (define (log2 x)
   (/ (log x) (log 2)))

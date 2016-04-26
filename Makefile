@@ -1,13 +1,19 @@
 FLAGS=-p
 BENCHDIR=bench/hamming/
 
+SEED=
+
 .PHONY: report publish www compile clean loc deploy
 
 all:
 	$(MAKE) report
 
 report:
+ifeq ($(SEED),)
 	racket herbie/reports/run.rkt $(FLAGS) $(BENCHDIR)
+else
+	racket herbie/reports/run.rkt -r "$(SEED)" $(FLAGS) $(BENCHDIR)
+endif
 
 publish:
 	bash herbie/reports/publish.sh upload graphs/

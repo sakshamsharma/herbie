@@ -5,15 +5,15 @@
 
 (herbie-test (v t)
   "Falkner and Boettcher, Equation (20:1,3)"
-  (/ (- 1 (* 5 (sqr v))) (* pi t (sqrt (* 2 (- 1 (* 3 (sqr v))))) (- 1 (sqr v)))))
+  (/ (- 1 (* 5 (sqr v))) (* PI t (sqrt (* 2 (- 1 (* 3 (sqr v))))) (- 1 (sqr v)))))
 
 (herbie-test (v)
   "Falkner and Boettcher, Equation (22+)"
-  (/ 4 (* 3 pi (- 1 (sqr v)) (sqrt (- 2 (* 6 (sqr v)))))))
+  (/ 4 (* 3 PI (- 1 (sqr v)) (sqrt (- 2 (* 6 (sqr v)))))))
 
 (herbie-test (a k m)
   "Falkner and Boettcher, Appendix A"
-  (/ (* a (expt k m)) (+ 1 (* 10 k) (sqr k))))
+  (/ (* a (pow k m)) (+ 1 (* 10 k) (sqr k))))
 
 (herbie-test (v)
   "Falkner and Boettcher, Appendix B, 1"

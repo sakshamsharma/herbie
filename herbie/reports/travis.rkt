@@ -14,8 +14,8 @@
   (define seed (get-seed))
   (printf "Running Herbie on ~a tests...\nSeed: ~a\n" (length tests) seed)
   (for/and ([test tests])
-    (match (get-test-result test "." #:seed seed)
-      [(test-result test rdir time prec input output pts exs
+    (match (get-test-result test #:seed seed)
+      [(test-result test time prec input output pts exs
                     start-errors end-error newpts newexs
                     start-newerrors end-newerrors target-newerrors timeline)
        (printf "[ ~ams]\t(~a→~a)\t~a\n"
@@ -36,15 +36,20 @@
          (when (test-output test) (printf "Target: ~a\n" (test-output test))))
 
        success?]
-      [(test-failure test prec exn time rdir timeline)
+      [(test-failure test prec exn time timeline)
        (printf "[   CRASH   ]\t\t\t~a\n" (test-name test))
        ((error-display-handler) (exn-message exn) exn)
        #f]
-      [(test-timeout test prec time rdir timeline)
+      [(test-timeout test prec time timeline)
        (printf "[  timeout  ]\t\t\t~a\n" (test-name test))
        #f])))
 
-(command-line
- #:program "travis.rkt"
- #:args bench-dir
- (exit (if (apply run-tests bench-dir) 0 1)))
+(module+ main
+  (command-line
+   #:program "travis.rkt"
+   #:once-each
+   [("--seed") rs "The random seed vector to use in point generation. If false (#f), a random seed is used'"
+    (define given-seed (read (open-input-string rs)))
+    (when given-seed (set-seed! given-seed))]
+   #:args bench-dir
+   (exit (if (apply run-tests bench-dir) 0 1))))

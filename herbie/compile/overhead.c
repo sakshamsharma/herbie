@@ -8,25 +8,35 @@
 #include <gmp.h>
 #include <mpfr.h>
 
+#ifdef __MACH__
+#include <mach/clock.h>
+#include <mach/mach.h>
+#endif
+
+#define ITERS 1000000
+
 #ifndef NARGS
 #define NARGS 1
 #endif
 
 #if NARGS == 1
-#define ARGS(t) t
+#define ARGMAP(f, ...) f(0, __VA_ARGS__)
 #elif NARGS == 2
-#define ARGS(t) t, t
+#define ARGMAP(f, ...) f(0, __VA_ARGS__), f(1, __VA_ARGS__)
 #elif NARGS == 3
-#define ARGS(t) t, t, t
+#define ARGMAP(f, ...) f(0, __VA_ARGS__), f(1, __VA_ARGS__), f(2, __VA_ARGS__)
 #elif NARGS == 4
-#define ARGS(t) t, t, t, t
+#define ARGMAP(f, ...) f(0, __VA_ARGS__), f(1, __VA_ARGS__), f(2, __VA_ARGS__), f(3, __VA_ARGS__)
 #elif NARGS == 5
-#define ARGS(t) t, t, t, t, t
+#define ARGMAP(f, ...) f(0, __VA_ARGS__), f(1, __VA_ARGS__), f(2, __VA_ARGS__), f(3, __VA_ARGS__), f(4, __VA_ARGS__)
 #elif NARGS == 6
-#define ARGS(t) t, t, t, t, t, t
+#define ARGMAP(f, ...) f(0, __VA_ARGS__), f(1, __VA_ARGS__), f(2, __VA_ARGS__), f(3, __VA_ARGS__), f(4, __VA_ARGS__), f(5, __VA_ARGS__)
 #else
-#define ARGS(t) abort()
+#define ARGMAP(f, ...) abort()
 #endif
+
+#define SND(a, b) b
+#define ARGS(t) ARGMAP(SND, t)
 
 void setup_mpfr_f_im(void);
 void setup_mpfr_f_fm(void);
@@ -46,7 +56,7 @@ typedef signed int i32;
 
 u32 ulpf(float x, float y) {
         i32 xx, yy;
-        
+
         if (x == 0) x = fabsf(x); // -0 == 0
         if (y == 0) y = fabsf(y); // -0 == 0
 
@@ -65,7 +75,7 @@ u32 ulpf(float x, float y) {
 
 u64 ulpd(double x, double y) {
         i64 xx, yy;
-        
+
         if (x == 0) x = fabs(x); // -0 == 0
         if (y == 0) y = fabs(y); // -0 == 0
 
@@ -76,10 +86,7 @@ u64 ulpd(double x, double y) {
         memcpy(&xx, &x, sizeof(double));
         memcpy(&yy, &y, sizeof(double));
 
-        xx = *((i64*) &x);
         xx = xx < 0 ? LLONG_MIN - xx : xx;
-
-        yy = *((i64*) &y);
         yy = yy < 0 ? LLONG_MIN - yy : yy;
 
         return xx >= yy ? xx - yy : yy - xx;
@@ -102,14 +109,20 @@ double rand_double() {
         u64 c2 = rand()&0xffff;
         u64 c3 = rand()&0xffff;
         u64 c = ((c3 << 48) | (c2 << 32) | (c1<<16) | c0);
-        return *(double*)&c;
+
+        double cc;
+        memcpy(&cc, &c, sizeof(double));
+        return cc;
 }
 
 float rand_float() {
         u32 c0 = rand()&0xffff;
         u32 c1 = rand()&0xffff;
         u32 c = ((c1<<16) | c0);
-        return *(float*)&c;
+
+        double cc;
+        memcpy(&cc, &c, sizeof(double));
+        return cc;
 }
 
 float *get_random_floats(int nums) {
@@ -138,31 +151,33 @@ double *get_random_doubles(int nums) {
         return arr;
 }
 
+#ifdef __MACH__ // OS X does not have clock_gettime, use clock_get_time
+
+#define CLOCK(ts) \
+  clock_get_time(cclock, &mts); \
+  ts.tv_sec = mts.tv_sec; \
+  ts.tv_nsec = mts.tv_nsec;
+
+#else
+
+#define CLOCK(ts) \
+  clock_gettime(CLOCK_REALTIME, &ts);
+
+#endif
+
 /* Some macros to make looping a bit easier */
-#define LOOP(iter)                                                      \
-        clock_gettime(CLOCK_MONOTONIC, &start);                         \
+
+#define LOOP(iter) \
+        CLOCK(start); \
         for (i = 0; i < iter; i++)
 
-#define END()                                                           \
-        clock_gettime(CLOCK_MONOTONIC, &end);                           \
+#define END() \
+        CLOCK(end); \
         rtime = (end.tv_sec - start.tv_sec) * 1.0e9 + (end.tv_nsec - start.tv_nsec);
 
 /* Calling a function with some number of arguments */
-#if NARGS == 1
-#define EVAL(rands, f) f(rands[i])
-#elif NARGS == 2
-#define EVAL(rands, f) f(rands[2*i], rands[2*i + 1])
-#elif NARGS == 3
-#define EVAL(rands, f) f(rands[3*i], rands[3*i + 1], rands[3*i + 2])
-#elif NARGS == 4
-#define EVAL(rands, f) f(rands[4*i], rands[4*i + 1], rands[4*i + 2], rands[4*i + 3])
-#elif NARGS == 5
-#define EVAL(rands, f) f(rands[5*i], rands[5*i + 1], rands[5*i + 2], rands[5*i + 3], rands[5*i + 4])
-#elif NARGS == 6
-#define EVAL(rands, f) f(rands[6*i], rands[6*i + 1], rands[6*i + 2], rands[6*i + 3], rands[6*i + 4], rands[6*i + 5])
-#else
-#define EVAL(rands, f) abort()
-#endif
+#define EVALAUX(n, rands) rands[NARGS*i] + n
+#define EVAL(rands, f) f(ARGMAP(EVALAUX, rands))
 
 #define CHECK(io, type, iter)                                           \
         max = total = 0;                                                \
@@ -177,8 +192,15 @@ double *get_random_doubles(int nums) {
                log(max + 1.0) / log(2), total / count##type);
 
 int main(int argc, char** argv) {
+
+#ifdef __MACH__
+        clock_serv_t cclock;
+        mach_timespec_t mts;
+        host_get_clock_service(mach_host_self(), SYSTEM_CLOCK, &cclock);
+#endif
+
         struct timespec start, end;
-        int i, maxi;
+        int i;
         u64 max = 0, maxcount = 0;
         double rtime, total = 0;
         int countf = 0, countd = 0;
@@ -186,7 +208,7 @@ int main(int argc, char** argv) {
         float *inf, *outif, *outof, *truef;
         setup_mpfr_f_im();
 
-        int iter = 1000000;
+        int iter = ITERS;
         if (argc > 1) iter = atoi(argv[1]);
 
         inf = get_random_floats(NARGS * iter);
@@ -247,6 +269,9 @@ int main(int argc, char** argv) {
         }
         printf("dd,%15g,%15llu\n", log(max + 1.0) / log(2), maxcount);
 
-        return 0;
+#ifdef __MACH__
+        mach_port_deallocate(mach_task_self(), cclock);
+#endif
 
+        return 0;
 }

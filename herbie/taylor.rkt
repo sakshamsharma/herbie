@@ -111,15 +111,15 @@
    [`(,x ,xs ...)
     `(* ,x ,(make-prod xs))]))
 
-(define (make-monomial var pow)
+(define (make-monomial var power)
   (cond
-   [(equal? pow 0) 1]
-   [(equal? pow 1) var]
-   [(equal? pow 2) `(sqr ,var)]
-   [(equal? pow -1) `(/ 1 ,var)]
-   [(equal? pow -2) `(/ 1 (sqr ,var))]
-   [(positive? pow) `(expt ,var ,pow)]
-   [(negative? pow) `(expt ,var ,pow)]))
+   [(equal? power 0)   1]
+   [(equal? power 1)   var]
+   [(equal? power 2)  `(sqr ,var)]
+   [(equal? power -1) `(/ 1 ,var)]
+   [(equal? power -2) `(/ 1 (sqr ,var))]
+   [(positive? power) `(pow ,var ,power)]
+   [(negative? power) `(pow ,var ,power)]))
 
 (define (make-term head vars expts)
   ; We do not want to output something like (* (sqr x) (sqr y)) -- we'd prefer (sqr (* x y))
@@ -164,7 +164,7 @@
      (taylor-exact expr)]
     [(? variable?)
      (taylor-exact expr)]
-    [`(abs ,arg)
+    [`(fabs ,arg)
      (taylor-exact expr)]
     [`(+ ,args ...)
      (apply taylor-add (map (curry taylor var) args))]
@@ -182,7 +182,7 @@
      (taylor-quotient (taylor var num) (taylor var den))]
     [`(if ,cond ,btrue ,bfalse)
      (taylor-exact expr)]
-    [`(mod ,a ,b)
+    [`(fmod ,a ,b)
      (taylor-exact expr)]
     [`(sqr ,a)
      (let ([ta (taylor var a)])
@@ -234,10 +234,10 @@
                         (simplify `(+ (* (- ,(car arg*)) (log ,var))
                                       ,((cdr rest) 0)))
                         ((cdr rest) n))))))]
-    [`(expt ,(? (curry equal? var)) ,(? integer? pow))
-     (cons (- pow) (λ (n) (if (= n 0) 1 0)))]
-    [`(expt ,base ,pow)
-     (taylor var `(exp (* ,pow (log ,base))))]
+    [`(pow ,(? (curry equal? var)) ,(? integer? power))
+     (cons (- power) (λ (n) (if (= n 0) 1 0)))]
+    [`(pow ,base ,power)
+     (taylor var `(exp (* ,power (log ,base))))]
     [`(tan ,arg)
      (taylor var `(/ (sin ,arg) (cos ,arg)))]
     [`(cotan ,arg)
@@ -250,11 +250,12 @@
 ; and an integer offset to the exponent
 
 (define (taylor-exact . terms)
+  (define items (list->vector (map simplify terms)))
   (cons 0
         (λ (n)
            (if (<= (length terms) n)
                0
-               (simplify (list-ref terms n))))))
+               (vector-ref items n)))))
 
 (define (first-nonzero-exp f)
   "Returns n, where (series n) != 0, but (series n) = 0 for all smaller n"
@@ -369,7 +370,7 @@
       (cons (/ offset* 2) f))))
 
 (define (rle l)
-  (for/list ([run (multipartition l identity)])
+  (for/list ([run (group-by identity l)])
     (cons (length run) (car run))))
 
 (define (partition-list n)
@@ -383,48 +384,54 @@
   (map rle (aux n 1)))
 
 (define (taylor-exp coeffs)
-   (cons 0
-         (λ (n)
-            (if (= n 0)
-                (simplify `(exp ,(coeffs 0)))
-                (simplify
-                 `(* (exp ,(coeffs 0))
-                     (+
-                      ,@(for/list ([p (partition-list n)])
-                          `(*
-                            ,@(for/list ([factor p])
-                                `(/ (expt ,(coeffs (cdr factor)) ,(car factor))
-                                    ,(factorial (car factor)))))))))))))
+  (let* ([hash (make-hash)])
+    (hash-set! hash 0 (simplify `(exp ,(coeffs 0))))
+    (cons 0
+          (λ (n)
+            (hash-ref! hash n
+                       (λ ()
+                         (simplify
+                          `(* (exp ,(coeffs 0))
+                              (+
+                               ,@(for/list ([p (partition-list n)])
+                                   `(*
+                                     ,@(for/list ([factor p])
+                                         `(/ (pow ,(coeffs (cdr factor)) ,(car factor))
+                                             ,(factorial (car factor)))))))))))))))
 
 (define (taylor-sin coeffs)
-  (cons 0
-        (λ (n)
-           (if (= n 0)
-               0
-               (simplify
-                `(+
-                  ,@(for/list ([p (partition-list n)])
-                      (if (= (modulo (apply + (map car p)) 2) 1)
-                          `(* ,(if (= (modulo (apply + (map car p)) 4) 1) 1 -1)
-                              ,@(for/list ([factor p])
-                                  `(/ (expt ,(coeffs (cdr factor)) ,(car factor))
-                                      ,(factorial (car factor)))))
-                          0))))))))
+  (let ([hash (make-hash)])
+    (hash-set! hash 0 0)
+    (cons 0
+          (λ (n)
+            (hash-ref! hash n
+                       (λ ()
+                         (simplify
+                          `(+
+                            ,@(for/list ([p (partition-list n)])
+                                (if (= (modulo (apply + (map car p)) 2) 1)
+                                    `(* ,(if (= (modulo (apply + (map car p)) 4) 1) 1 -1)
+                                        ,@(for/list ([factor p])
+                                            `(/ (pow ,(coeffs (cdr factor)) ,(car factor))
+                                                ,(factorial (car factor)))))
+                                    0))))))))))
 
 (define (taylor-cos coeffs)
-  (cons 0
-        (λ (n)
-           (if (= n 0)
-               1
-               (simplify
-                `(+
-                  ,@(for/list ([p (partition-list n)])
-                      (if (= (modulo (apply + (map car p)) 2) 0)
-                          `(* ,(if (= (modulo (apply + (map car p)) 4) 0) 1 -1)
-                              ,@(for/list ([factor p])
-                                  `(/ (expt ,(coeffs (cdr factor)) ,(car factor))
-                                      ,(factorial (car factor)))))
-                          0))))))))
+  (let ([hash (make-hash)])
+    (hash-set! hash 0 1)
+    (cons 0
+          (λ (n)
+            (hash-ref! hash n
+                       (λ ()
+                         (simplify
+                          `(+
+                            ,@(for/list ([p (partition-list n)])
+                                (if (= (modulo (apply + (map car p)) 2) 0)
+                                    `(* ,(if (= (modulo (apply + (map car p)) 4) 0) 1 -1)
+                                        ,@(for/list ([factor p])
+                                            `(/ (pow ,(coeffs (cdr factor)) ,(car factor))
+                                                ,(factorial (car factor)))))
+                                    0))))))))))
 
 ;; This is a hyper-specialized symbolic differentiator for log(f(x))
 
@@ -451,7 +458,7 @@
 
 (define (lognormalize table)
   (filter (λ (entry) (not (= (car entry) 0)))
-          (for/list ([entry (multipartition table cdr)])
+          (for/list ([entry (group-by cdr table)])
             (cons (apply + (map car entry))
                   (cdar entry)))))
 
@@ -483,6 +490,6 @@
                                         `(* ,coeff (/ (* ,@(for/list ([i (in-naturals 1)] [p ps])
                                                              (if (= p 0)
                                                                  1
-                                                                 `(expt (* ,(factorial i) ,(coeffs i)) ,p))))
-                                                      (expt ,(coeffs 0) ,(- k))))])))
+                                                                 `(pow (* ,(factorial i) ,(coeffs i)) ,p))))
+                                                      (pow ,(coeffs 0) ,(- k))))])))
                               ,(factorial n))))))))))

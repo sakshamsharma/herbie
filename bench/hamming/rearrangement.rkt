@@ -14,6 +14,7 @@
 (lambda (x)
   #:name "NMSE example 3.4"
   (/ (- 1 (cos x)) (sin x))
+  #:expected 3
   #:target
   (tan (/ x 2)))
 
@@ -50,7 +51,8 @@
 
 (lambda (x)
   #:name "NMSE problem 3.3.4"
-  (- (expt (+ x 1) (/ 1 3)) (expt x (/ 1 3))))
+  #:expected #f
+  (- (pow (+ x 1) (/ 1 3)) (pow x (/ 1 3))))
 
 (lambda (x eps)
   #:name "NMSE problem 3.3.5"
@@ -63,5 +65,6 @@
 (lambda (x)
   #:name "NMSE problem 3.3.7"
   (+ (- (exp x) 2) (exp (- x)))
+  #:expected #f
   #:target
   (* 4 (sqr (sinh (/ x 2)))))

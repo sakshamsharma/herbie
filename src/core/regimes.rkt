@@ -101,16 +101,60 @@
 	 splitpoints)))
 
 (define (option-on-expr alts expr)
-  (match-let* ([vars (program-variables (*start-prog*))]
-	       [`(,pts ,exs) (sort-context-on-expr (*pcontext*) expr vars)])
-    (let* ([err-lsts (parameterize ([*pcontext* (mk-pcontext pts exs)])
-		       (map alt-errors alts))]
-	   [bit-err-lsts (map (curry map ulps->bits) err-lsts)]
-           [merged-err-lsts (map (curry merge-err-lsts expr pts) bit-err-lsts)]
-	   [split-indices (err-lsts->split-indices merged-err-lsts)]
-	   [split-points (sindices->spoints (remove-duplicates (filter-not nan? pts)) expr alts split-indices)])
-      (option split-points (pick-errors split-points pts err-lsts vars)))))
+  (define vars (program-variables (*start-prog*)))
+  ;; A table of rows pt, ex, f(pt), err_i(pt, ex), sorted by f(pt)
+  (define table
+    (sort
+     (flip-lists
+      (append
+       (flip-lists
+        (for/list ([(pt ex) (in-pcontext (*pcontext*))])
+          (list pt ex ((eval-prog `(λ ,vars ,expr) mode:fl) pt))))
+       (for/list ([alt alts]) (map ulps->bits (alt-errors alt)))))
+     < #:key third))
 
+  ;; Next, we drop the points that are nan; we don't want them
+  (define no-nan (filter-not (compose nan? third) table))
+  (define no-dups
+    (merge-duplicates
+     no-nan #:key third
+     (λ (a b) (list* (first a) (second a) (third a) (map + (drop a 3) (drop b 3))))))
+
+  (define sis (err-lsts->split-indices (map (curryr drop 3) no-dups)))
+  (define sps
+    (for/list ([si sis])
+      (define idx (si-pidx si))
+      (sp (si-cidx si) expr
+          (if (equal? idx (length no-dups)) #f (third (list-ref table idx))))))
+
+  (define which-alt
+    (for/list ([in (map third table)])
+      (eprintf "~a : ~a\n" in sps)
+      (for/first ([sp sps] #:when (or (not (sp-point sp)) (<= in (sp-point sp))))
+        (sp-cidx sp))))
+
+  (option sps
+          (for/list ([alt-idx which-alt] [errs (flip-lists (drop table 3))])
+            (list-ref errs alt-idx))))
+
+#|
+  (define merged-err-lsts (map (curry merge-err-lsts (map third table)) (drop bit-err-lsts 3)))
+  (define split-indices (err-lsts->split-indices merged-err-lsts))
+  (define split-points (sindices->spoints  expr alts split-indices))
+  (option split-points (pick-errors split-points pts err-lsts vars)))
+|#
+
+(define (merge-duplicates lst f [same? equal?] #:key [key values])
+  "Apply f to every pair of consecutive same? elements"
+  (define-values (out last)
+    (for/fold ([out '()] [last #f]) ([x lst])
+      (define cur (key x))
+      (if (and last (same? cur last))
+          (values (cons (f (car out) x) (cdr out)) last)
+          (values (cons x out) cur))))
+  out)
+
+#|
 ;; Accepts a list of sindices in one indexed form and returns the
 ;; proper splitpoints in floath form.
 (define (sindices->spoints points expr alts sindices)
@@ -153,17 +197,15 @@
 	       expr
 	       +inf.0)))))
 
-(define (merge-err-lsts expr pts errs)
-  (define inps (map (eval-prog expr mode:fl) pts))
-  (define errs*
-    (for/list ([in inps] [err errs] #:when (not (nan? in)))
-      errs*))
+(define (merge-err-lsts inps errs)
+  (define errs* (for/list ([in inps] [err errs] #:when (not (nan? in))) err))
   (let loop ([in (car inps)] [inps (cdr inps)] [err (car errs*)] [errs (cdr errs*)])
     (if (null? inps)
         (list err)
         (if (equal? in (car inps))
             (loop in (cdr inps) (+ err (car errs)) (cdr errs))
             (cons err (loop (car inps) (cdr inps) (car errs) (cdr errs)))))))
+|#
 
 (define (point-with-dim index point val)
   (map (λ (pval pindex) (if (= pindex index) val pval))

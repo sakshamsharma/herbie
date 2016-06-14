@@ -3,15 +3,24 @@
 ;; Arithmetic identities for rewriting programs.
 
 (require "../common.rkt")
+(require "../core/ematch.rkt")
 
 (provide (struct-out rule) *rules* *simplify-rules* get-rule)
 
 (struct rule (name input output) ; Input and output are patterns
         #:methods gen:custom-write
         [(define (write-proc rule port mode)
-           (display "#<rule " port)
-           (write (rule-name rule) port)
-           (display ">" port))])
+           (display "\nexpr match {\n  case " port)
+           (write-scala (rule-input rule) port)
+           (display " => " port)
+           (write-scala (rule-output rule) port)
+           (display "\n  case _ => randomRewriting(expr)(tail)\n}\n" port))])
+
+(define (write-scala pattern port)
+  (let ([scala (match pattern
+                 ['(+ a b) '(Plus(a, b))]
+                 [x x])])
+    (write scala port)))
 
 (define *rulesets* (make-parameter '()))
 

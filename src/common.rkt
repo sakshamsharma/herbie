@@ -15,7 +15,7 @@
          *start-prog* html-escape-unsafe
          flip-lists argmaxs
          binary-search-floats binary-search-ints binary-search
-         random-exp assert setfindf first-value log2 for/append
+         random-exp assert setfindf first-value log22 for/append
          (all-from-out "config.rkt") (all-from-out "debug.rkt")
          get-seed set-seed! index-of)
 
@@ -177,7 +177,7 @@
 (module+ test
   (check-equal? (setfindf positive? (set -3 6 0)) 6))
 
-(define (log2 x)
+(define (log22 x)
   (/ (log x) (log 2)))
 
 (define (list-join l1 l2)

@@ -47,9 +47,13 @@
             ['sqrt (string-append "Sqrt(" (write-scala (cdr pat)))]
             [x (if (pair? (cdr pat))
                    (string-append
-                    (string-append (symbol->string x) ", ")
+                    (string-append (if (symbol? x)
+                                       (symbol->string x)
+                                       (number->string x)) ", ")
                     (write-scala (cdr pat)))
-                   (string-append (symbol->string x) (write-scala (cdr pat))))]))
+                   (string-append (if (symbol? x)
+                                      (symbol->string x)
+                                      "UnitLiteral()") (write-scala (cdr pat))))]))
       ")"))
 
 (define *rulesets* (make-parameter '()))

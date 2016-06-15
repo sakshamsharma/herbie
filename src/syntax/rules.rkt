@@ -38,7 +38,9 @@
               (string-append (write-scala (car pat)) (write-scala (cdr pat))))
           (match (car pat)
             ['+ (string-append "Plus(" (write-scala (cdr pat))) ]
-            ['- (string-append "Minus(" (write-scala (cdr pat))) ]
+            ['- (if (equal? (length (cdr pat)) 2 )
+                    (string-append "Minus(" (write-scala (cdr pat)))
+                    (string-append "UMinus(" (write-scala (cdr pat)))) ]
             ['* (string-append "Times(" (write-scala (cdr pat))) ]
             ['/ (string-append "Division(" (write-scala (cdr pat))) ]
             ['pow (string-append "Pow(" (write-scala (cdr pat)))]

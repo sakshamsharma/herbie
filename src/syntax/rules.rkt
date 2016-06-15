@@ -15,7 +15,7 @@
            (display (rule-name rule) port)
            (display "\n  expr match {\n    case " port)
            (display (write-scala (rule-input rule) print-symbol) port)
-           (display " => " port)
+           (display " =>\n      " port)
            (display (write-scala (rule-output rule) print-symbol-copy) port)
            (display "\n    case _ => randomRewriting(expr)(tail)\n  }\n" port))])
 
@@ -49,25 +49,31 @@
       (if (list? (car pat))
           ;; If the pattern itself has sub-patterns
           ;; Print them recursively
-          (if (pair? (cdr pat))
-              (string-append
-               (write-scala (car pat) sp) ", " (write-scala (cdr pat) sp))
-              (string-append (write-scala (car pat) sp) (write-scala (cdr pat) sp)))
+          (let* ([result1 (write-scala (car pat) sp)]
+                 [result2 (write-scala (cdr pat) (cdr result1))])
+            (if (pair? (cdr pat))
+                ;; Condition if cdr pat is a pair, that means more left
+                (string-append (car result1) ", " (car result2))
+                ;; Else, it has ended
+                (string-append (car result1) (car result2))))
+              ;;;(string-append (write-scala (car pat) sp) (write-scala (cdr pat) sp)))
           ;; Else, it must be a list like '(* _ _)
           ;; Iterate over it
           (match (car pat)
-            ['+ (string-append "Plus(" (write-scala (cdr pat) sp)) ]
+            ['+ (string-append "Plus(" (car (write-scala (cdr pat) sp))) ]
             ['- (if (equal? (length (cdr pat)) 2 )
                     ;; If it is a unary minus, size of pattern will tell
-                    (string-append "Minus(" (write-scala (cdr pat) sp))
-                    (string-append "UMinus(" (write-scala (cdr pat) sp))) ]
-            ['* (string-append "Times(" (write-scala (cdr pat) sp)) ]
+                    (let ([(sp1, str1)]))
+                    (string-append "Minus(" (car (write-scala (cdr pat) sp)))
+                    (string-append "UMinus(" (car (write-scala (cdr pat) sp)))) ]
+            ['* (string-append "Times(" (car (write-scala (cdr pat) sp))) ]
             ['/ (if (equal? (length (cdr pat)) 2 )
                     ;; If it is a unary div, size of pattern will tell
-                    (string-append "Division(" (write-scala (cdr pat) sp))
-                    (string-append "Division(UnitLiteral(), " (write-scala (cdr pat) sp))) ]
-            ['/ (string-append "Division(" (write-scala (cdr pat) sp)) ]
-            ['pow (string-append "Pow(" (write-scala (cdr pat) sp))]
+                    (string-append "Division(" (car (write-scala (cdr pat) sp)))
+                    (string-append "Division(UnitLiteral(), "
+                                   (car (write-scala (cdr pat) sp)))) ]
+            ['/ (string-append "Division(" (car (write-scala (cdr pat) sp))) ]
+            ['pow (string-append "Pow(" (car (write-scala (cdr pat) sp))]
             ['fabs (string-append "Abs(" (write-scala (cdr pat) sp))]
             ['sqr (let ([literal (car (cdr pat))])
                     (write-scala (cons '* (cons literal (cons literal '()))) sp))]

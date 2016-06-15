@@ -49,22 +49,22 @@
     (call/ec
      (λ (k)
        (for ([var (in-set (enode-vars e))])
-	 (when (and (constant? var) (equal? pat var))
-	   (k '(()))))
+         (when (and (constant? var) (equal? pat var))
+           (k '(()))))
        '()))]
    [(variable? pat)
     `(((,pat . ,e)))]
    [(list? pat)
     (apply append
-	   (for/list ([var (in-set (enode-vars e))])
-	     (if (and (list? var) (eq? (car var) (car pat))
-		      (= (length var) (length pat)))
-		 (filter identity
-			 (map (curry apply merge)
-			      (apply list-cartesian-product
-				     (for/list ([subpat (in-list (cdr pat))] [sube (in-list (cdr var))])
-				       (match-e subpat sube)))))
-		 '())))]
+           (for/list ([var (in-set (enode-vars e))])
+             (if (and (list? var) (eq? (car var) (car pat))
+                      (= (length var) (length pat)))
+                 (filter identity
+                         (map (curry apply merge)
+                              (apply list-cartesian-product
+                                     (for/list ([subpat (in-list (cdr pat))] [sube (in-list (cdr var))])
+                                       (match-e subpat sube)))))
+                 '())))]
    [else
     (error "WTF" pat)]))
 

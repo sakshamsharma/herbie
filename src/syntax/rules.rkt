@@ -4,23 +4,53 @@
 
 (require "../common.rkt")
 (require "../core/ematch.rkt")
+(require "../programs.rkt")
 
 (provide (struct-out rule) *rules* *simplify-rules* get-rule)
 
 (struct rule (name input output) ; Input and output are patterns
         #:methods gen:custom-write
         [(define (write-proc rule port mode)
-           (display "\nexpr match {\n  case " port)
-           (write-scala (rule-input rule) port)
+           (display "\n  // " port)
+           (display (rule-name rule) port)
+           (display "\n  expr match {\n    case " port)
+           (display (write-scala (rule-input rule)) port)
            (display " => " port)
-           (write-scala (rule-output rule) port)
-           (display "\n  case _ => randomRewriting(expr)(tail)\n}\n" port))])
+           (display (write-scala (rule-output rule)) port)
+           (display "\n    case _ => randomRewriting(expr)(tail)\n  }\n" port))])
 
-(define (write-scala pattern port)
-  (let ([scala (match pattern
-                 ['(+ a b) '(Plus(a, b))]
-                 [x x])])
-    (write scala port)))
+(define (add-case-numbering rule)
+  (foldl
+   (lambda (x n)
+     (display (string-append "case " (number->string n) " => {"))
+     (print x)
+     (display "}\n")
+     (+ n 1))
+   0
+   rule))
+
+(define (write-scala pat)
+  (if (pair? pat)
+      (if (list? (car pat))
+          (if (pair? (cdr pat))
+              (string-append
+               (write-scala (car pat)) ", " (write-scala (cdr pat)))
+              (string-append (write-scala (car pat)) (write-scala (cdr pat))))
+          (match (car pat)
+            ['+ (string-append "Plus(" (write-scala (cdr pat))) ]
+            ['- (string-append "Minus(" (write-scala (cdr pat))) ]
+            ['* (string-append "Times(" (write-scala (cdr pat))) ]
+            ['/ (string-append "Division(" (write-scala (cdr pat))) ]
+            ['pow (string-append "Pow(" (write-scala (cdr pat)))]
+            ['sqr (let ([literal (car (cdr pat))])
+                    (write-scala (cons '* (cons literal (cons literal '())))))]
+            ['sqrt (string-append "Sqrt(" (write-scala (cdr pat)))]
+            [x (if (pair? (cdr pat))
+                   (string-append
+                    (string-append (symbol->string x) ", ")
+                    (write-scala (cdr pat)))
+                   (string-append (symbol->string x) (write-scala (cdr pat))))]))
+      ")"))
 
 (define *rulesets* (make-parameter '()))
 

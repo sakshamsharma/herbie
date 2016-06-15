@@ -14,10 +14,23 @@
            (display "\n  // " port)
            (display (rule-name rule) port)
            (display "\n  expr match {\n    case " port)
-           (display (write-scala (rule-input rule)) port)
+           (display (write-scala (rule-input rule) print-symbol) port)
            (display " => " port)
-           (display (write-scala (rule-output rule)) port)
+           (display (write-scala (rule-output rule) print-symbol-copy) port)
            (display "\n    case _ => randomRewriting(expr)(tail)\n  }\n" port))])
+
+;; Have 2 kinds of symbol printer since
+;; printing symbols on the RHS requires them to have .copy attached
+;; Ideally, symbols printed on the left should not get copied twice
+(define (print-symbol symb)
+  (symbol->string symb))
+
+(define (print-symbol-copy symb)
+  (string-append (symbol->string symb) ".copy"))
+
+(define (numb-printer numb)
+  (cond [(equal? numb 1) "UnitLiteral()"]
+        [(equal? numb 0) "Int32Literal(0)"]))
 
 (define (add-case-numbering rule)
   (foldl
@@ -29,34 +42,48 @@
    0
    rule))
 
-(define (write-scala pat)
+(define (write-scala pat sp)
+  ;; If the expression is left, recurse over it
+  ;; else just print a closing bracket
   (if (pair? pat)
       (if (list? (car pat))
+          ;; If the pattern itself has sub-patterns
+          ;; Print them recursively
           (if (pair? (cdr pat))
               (string-append
-               (write-scala (car pat)) ", " (write-scala (cdr pat)))
-              (string-append (write-scala (car pat)) (write-scala (cdr pat))))
+               (write-scala (car pat) sp) ", " (write-scala (cdr pat) sp))
+              (string-append (write-scala (car pat) sp) (write-scala (cdr pat) sp)))
+          ;; Else, it must be a list like '(* _ _)
+          ;; Iterate over it
           (match (car pat)
-            ['+ (string-append "Plus(" (write-scala (cdr pat))) ]
+            ['+ (string-append "Plus(" (write-scala (cdr pat) sp)) ]
             ['- (if (equal? (length (cdr pat)) 2 )
-                    (string-append "Minus(" (write-scala (cdr pat)))
-                    (string-append "UMinus(" (write-scala (cdr pat)))) ]
-            ['* (string-append "Times(" (write-scala (cdr pat))) ]
-            ['/ (string-append "Division(" (write-scala (cdr pat))) ]
-            ['pow (string-append "Pow(" (write-scala (cdr pat)))]
+                    ;; If it is a unary minus, size of pattern will tell
+                    (string-append "Minus(" (write-scala (cdr pat) sp))
+                    (string-append "UMinus(" (write-scala (cdr pat) sp))) ]
+            ['* (string-append "Times(" (write-scala (cdr pat) sp)) ]
+            ['/ (if (equal? (length (cdr pat)) 2 )
+                    ;; If it is a unary div, size of pattern will tell
+                    (string-append "Division(" (write-scala (cdr pat) sp))
+                    (string-append "Division(UnitLiteral(), " (write-scala (cdr pat) sp))) ]
+            ['/ (string-append "Division(" (write-scala (cdr pat) sp)) ]
+            ['pow (string-append "Pow(" (write-scala (cdr pat) sp))]
+            ['fabs (string-append "Abs(" (write-scala (cdr pat) sp))]
             ['sqr (let ([literal (car (cdr pat))])
-                    (write-scala (cons '* (cons literal (cons literal '())))))]
-            ['sqrt (string-append "Sqrt(" (write-scala (cdr pat)))]
+                    (write-scala (cons '* (cons literal (cons literal '()))) sp))]
+            ['sqrt (string-append "Sqrt(" (write-scala (cdr pat) sp))]
             [x (if (pair? (cdr pat))
                    (string-append
                     (string-append (if (symbol? x)
-                                       (symbol->string x)
-                                       (number->string x)) ", ")
-                    (write-scala (cdr pat)))
+                                       (sp x)
+                                       (numb-printer x)) ", ")
+                    (write-scala (cdr pat) sp))
                    (string-append (if (symbol? x)
-                                      (symbol->string x)
-                                      "UnitLiteral()") (write-scala (cdr pat))))]))
-      ")"))
+                                      (sp x)
+                                      (numb-printer x)) (write-scala (cdr pat) sp)))]))
+      (cond [(symbol? pat) (sp pat)]
+            [(number? pat) (numb-printer pat)]
+            [(not (or (symbol? pat) (number? pat))) ")"])))
 
 (define *rulesets* (make-parameter '()))
 

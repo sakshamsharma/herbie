@@ -65,9 +65,9 @@
             (if (pair? (cdr pat))
                 ;; Condition if cdr pat is a pair, that means more is left
                 ;; Do remember to return the final sp as well
-                (cons (string-append (car result1) ", " (cdr result2)) (car result2))
+                (cons (string-append (car result1) ", " (car result2)) (cdr result2))
                 ;; Else just don't add the comma))
-                (cons (string-append (car result1) (cdr result2)) (car result2))))
+                (cons (string-append (car result1) (car result2)) (cdr result2))))
           ;; Else, it must be a list like '(* _ _)
           ;; Iterate over it
           (let* ([result (gen-scala (cdr pat) sp)])
@@ -77,18 +77,15 @@
                       (cons (string-append "Minus(" (car result)) (cdr result))
                       (cons (string-append "UMinus(" (car result)) (cdr result)))]
               ['* (cons (string-append "Times(" (car result)) (cdr result))]
-;;             ['/ (if (equal? (length (cdr pat)) 2 )
-;;                     ;; If it is a unary div, size of pattern will tell
-;;                     (string-append "Division(" (car (write-scala (cdr pat) sp)))
-;;                     (string-append "Division(UnitLiteral(), "
-;;                                    (car (write-scala (cdr pat) sp)))) ]
-;;             ['/ (string-append "Division(" (car (write-scala (cdr pat) sp))) ]
-;;             ['pow (string-append "Pow(" (car (write-scala (cdr pat) sp))]
-;;             ['fabs (string-append "Abs(" (write-scala (cdr pat) sp))]
-;;             ['sqr (let ([literal (car (cdr pat))])
-;;                     (write-scala (cons '* (cons literal (cons literal '()))) sp))]
-;;             ['sqrt (string-append "Sqrt(" (write-scala (cdr pat) sp))]
-
+              ['/ (if (equal? (length (cdr pat)) 2)
+                      (cons (string-append "Division(" (car result)) (cdr result))
+                      (cons (string-append "Division(RealLiteral(1), "
+                                           (car result)) (cdr result)))]
+              ['pow (cons (string-append "Pow(" (car result)) (cdr result))]
+              ['fabs (cons (string-append "Abs(" (car result)) (cdr result))]
+              ['sqrt (cons (string-append "Sqrt(" (car result)) (cdr result))]
+              ['sqr (let* ([literal (car (cdr pat))])
+                      (gen-scala (cons '* (cons literal (cons literal '()))) sp))]
               [x (let* ([tres (if (symbol? x)
                                   ;; Print symbol, return new list with function
                                   (awesome-symb-printer x sp)
@@ -109,65 +106,17 @@
              (cons (numb-printer pat) sp)]
             [(not (or (symbol? pat) (number? pat))) (cons ")" sp)])))
 
-;; (define (write-scala pat sp)
-;;   ;; If the expression is left, recurse over it
-;;   ;; else just print a closing bracket
-;;   (if (pair? pat)
-;;       (if (list? (car pat))
-;;           ;; If the pattern itself has sub-patterns
-;;           ;; Print them recursively
-;;           (let* ([result1 (write-scala (car pat) sp)]
-;;                  [result2 (write-scala (cdr pat) (cdr result1))])
-;;             (if (pair? (cdr pat))
-;;                 ;; Condition if cdr pat is a pair, that means more left
-;;                 (string-append (car result1) ", " (car result2))
-;;                 ;; Else, it has ended
-;;                 (string-append (car result1) (car result2))))
-;;           ;; Else, it must be a list like '(* _ _)
-;;           ;; Iterate over it
-;;           (match (car pat)
-;;             ['+ (string-append "Plus(" (car (write-scala (cdr pat) sp))) ]
-;;             ['- (if (equal? (length (cdr pat)) 2 )
-;;                     ;; If it is a unary minus, size of pattern will tell
-;;                     (let ([(sp1, str1)]))
-;;                     (string-append "Minus(" (car (write-scala (cdr pat) sp)))
-;;                     (string-append "UMinus(" (car (write-scala (cdr pat) sp)))) ]
-;;             ['* (string-append "Times(" (car (write-scala (cdr pat) sp))) ]
-;;             ['/ (if (equal? (length (cdr pat)) 2 )
-;;                     ;; If it is a unary div, size of pattern will tell
-;;                     (string-append "Division(" (car (write-scala (cdr pat) sp)))
-;;                     (string-append "Division(UnitLiteral(), "
-;;                                    (car (write-scala (cdr pat) sp)))) ]
-;;             ['/ (string-append "Division(" (car (write-scala (cdr pat) sp))) ]
-;;             ['pow (string-append "Pow(" (car (write-scala (cdr pat) sp))]
-;;             ['fabs (string-append "Abs(" (write-scala (cdr pat) sp))]
-;;             ['sqr (let ([literal (car (cdr pat))])
-;;                     (write-scala (cons '* (cons literal (cons literal '()))) sp))]
-;;             ['sqrt (string-append "Sqrt(" (write-scala (cdr pat) sp))]
-;;             [x (if (pair? (cdr pat))
-;;                    (string-append
-;;                     (string-append (if (symbol? x)
-;;                                        (sp x)
-;;                                        (numb-printer x)) ", ")
-;;                     (write-scala (cdr pat) sp))
-;;                    (string-append (if (symbol? x)
-;;                                       (sp x)
-;;                                       (numb-printer x)) (write-scala (cdr pat) sp)))]))
-;;       (cond [(symbol? pat) (sp pat)]
-;;             [(number? pat) (numb-printer pat)]
-;;             [(not (or (symbol? pat) (number? pat))) ")"])))
-
 (define *rulesets* (make-parameter '()))
 
 (define-syntax-rule (define-ruleset name groups [rname input output] ...)
   (begin (define name (list (rule 'rname 'input 'output) ...))
-	 (*rulesets* (cons (cons name 'groups) (*rulesets*)))))
+   (*rulesets* (cons (cons name 'groups) (*rulesets*)))))
 
 (define (get-rule name)
   (let ([results (filter (λ (rule) (eq? (rule-name rule) name)) (*rules*))])
     (if (null? results)
-	(error "Could not find a rule by the name" name)
-	(car results))))
+  (error "Could not find a rule by the name" name)
+  (car results))))
 
 ; Commutativity
 (define-ruleset commutivity (arithmetic simplify)

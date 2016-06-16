@@ -11,22 +11,24 @@
 (struct rule (name input output) ; Input and output are patterns
         #:methods gen:custom-write
         [(define (write-proc rule port mode)
-           (display "\n  // " port)
-           (display (rule-name rule) port)
-           (display "\n  expr match {\n    case " port)
-           (display (write-scala (rule-input rule) print-symbol) port)
-           (display " =>\n      " port)
-           (display (write-scala (rule-output rule) print-symbol-copy) port)
-           (display "\n    case _ => randomRewriting(expr)(tail)\n  }\n" port))])
+           (let* ([leftres (gen-scala (rule-input rule) (cons print-symbol '()))]
+                  [rigtres (gen-scala (rule-output rule) (cons print-symbol-copy '()))])
+             (display "\n  // " port)
+             (display (rule-name rule) port)
+             (display "\n  expr match {\n    case " port)
+             (display (car leftres) port)
+             (display " =>\n      " port)
+             (display (car rigtres) port)
+             (display "\n    case _ => randomRewriting(expr)(tail)\n  }\n" port)))])
 
 ;; Have 2 kinds of symbol printer since
 ;; printing symbols on the RHS requires them to have .copy attached
 ;; Ideally, symbols printed on the left should not get copied twice
-(define (print-symbol symb)
-  (symbol->string symb))
+(define (print-symbol symb lis)
+  (cons (symbol->string symb) lis))
 
-(define (print-symbol-copy symb)
-  (string-append (symbol->string symb) ".copy"))
+(define (print-symbol-copy symb lis)
+  (cons (string-append (symbol->string symb) ".copy") lis))
 
 (define (numb-printer numb)
   (cond [(equal? numb 1) "RealLiteral(one)"]
@@ -42,53 +44,118 @@
    0
    rule))
 
-(define (write-scala pat sp)
-  ;; If the expression is left, recurse over it
+(define (awesome-symb-printer x sp)
+  ;; Print symbol, return new list with function
+  (let* ([fxn (car sp)]
+         [lis (cdr sp)]
+         [res (fxn x lis)]
+         [nst (car res)]
+         [nsp (cons fxn (cdr res))])
+    (cons nst nsp)))
+
+(define (gen-scala pat sp)
+  ;; If expr is list, map over it)
   ;; else just print a closing bracket
   (if (pair? pat)
       (if (list? (car pat))
           ;; If the pattern itself has sub-patterns
           ;; Print them recursively
-          (let* ([result1 (write-scala (car pat) sp)]
-                 [result2 (write-scala (cdr pat) (cdr result1))])
+          (let* ([result1 (gen-scala (car pat) sp)]
+                 [result2 (gen-scala (cdr pat) (cdr result1))])
             (if (pair? (cdr pat))
-                ;; Condition if cdr pat is a pair, that means more left
-                (string-append (car result1) ", " (car result2))
-                ;; Else, it has ended
-                (string-append (car result1) (car result2))))
+                ;; Condition if cdr pat is a pair, that means more is left
+                ;; Do remember to return the final sp as well
+                (cons (string-append (car result1) ", " (cdr result2)) (car result2))
+                ;; Else just don't add the comma))
+                (cons (string-append (car result1) (cdr result2)) (car result2))))
           ;; Else, it must be a list like '(* _ _)
           ;; Iterate over it
-          (match (car pat)
-            ['+ (string-append "Plus(" (car (write-scala (cdr pat) sp))) ]
-            ['- (if (equal? (length (cdr pat)) 2 )
-                    ;; If it is a unary minus, size of pattern will tell
-                    (let ([(sp1, str1)]))
-                    (string-append "Minus(" (car (write-scala (cdr pat) sp)))
-                    (string-append "UMinus(" (car (write-scala (cdr pat) sp)))) ]
-            ['* (string-append "Times(" (car (write-scala (cdr pat) sp))) ]
-            ['/ (if (equal? (length (cdr pat)) 2 )
-                    ;; If it is a unary div, size of pattern will tell
-                    (string-append "Division(" (car (write-scala (cdr pat) sp)))
-                    (string-append "Division(UnitLiteral(), "
-                                   (car (write-scala (cdr pat) sp)))) ]
-            ['/ (string-append "Division(" (car (write-scala (cdr pat) sp))) ]
-            ['pow (string-append "Pow(" (car (write-scala (cdr pat) sp))]
-            ['fabs (string-append "Abs(" (write-scala (cdr pat) sp))]
-            ['sqr (let ([literal (car (cdr pat))])
-                    (write-scala (cons '* (cons literal (cons literal '()))) sp))]
-            ['sqrt (string-append "Sqrt(" (write-scala (cdr pat) sp))]
-            [x (if (pair? (cdr pat))
-                   (string-append
-                    (string-append (if (symbol? x)
-                                       (sp x)
-                                       (numb-printer x)) ", ")
-                    (write-scala (cdr pat) sp))
-                   (string-append (if (symbol? x)
-                                      (sp x)
-                                      (numb-printer x)) (write-scala (cdr pat) sp)))]))
-      (cond [(symbol? pat) (sp pat)]
-            [(number? pat) (numb-printer pat)]
-            [(not (or (symbol? pat) (number? pat))) ")"])))
+          (let* ([result (gen-scala (cdr pat) sp)])
+            (match (car pat)
+              ['+ (cons (string-append "Plus(" (car result)) (cdr result))]
+              ['- (if (equal? (length (cdr pat)) 2)
+                      (cons (string-append "Minus(" (car result)) (cdr result))
+                      (cons (string-append "UMinus(" (car result)) (cdr result)))]
+              ['* (cons (string-append "Times(" (car result)) (cdr result))]
+;;             ['/ (if (equal? (length (cdr pat)) 2 )
+;;                     ;; If it is a unary div, size of pattern will tell
+;;                     (string-append "Division(" (car (write-scala (cdr pat) sp)))
+;;                     (string-append "Division(UnitLiteral(), "
+;;                                    (car (write-scala (cdr pat) sp)))) ]
+;;             ['/ (string-append "Division(" (car (write-scala (cdr pat) sp))) ]
+;;             ['pow (string-append "Pow(" (car (write-scala (cdr pat) sp))]
+;;             ['fabs (string-append "Abs(" (write-scala (cdr pat) sp))]
+;;             ['sqr (let ([literal (car (cdr pat))])
+;;                     (write-scala (cons '* (cons literal (cons literal '()))) sp))]
+;;             ['sqrt (string-append "Sqrt(" (write-scala (cdr pat) sp))]
+
+              [x (let* ([tres (if (symbol? x)
+                                  ;; Print symbol, return new list with function
+                                  (awesome-symb-printer x sp)
+                                  ;; Else print number and return same sp
+                                  (cons (numb-printer x) sp))])
+                   (if (pair? (cdr pat))
+                       (cons (string-append (car tres)
+                                            ", "
+                                            (car result))
+                             (cdr tres))
+                       (cons (string-append (car tres)
+                                            (car result))
+                             (cdr tres))))])))
+      ;; What if the pattern isn't a pair? It's the end!
+      (cond [(symbol? pat)
+             (awesome-symb-printer pat sp)]
+            [(number? pat)
+             (cons (numb-printer pat) sp)]
+            [(not (or (symbol? pat) (number? pat))) (cons ")" sp)])))
+
+;; (define (write-scala pat sp)
+;;   ;; If the expression is left, recurse over it
+;;   ;; else just print a closing bracket
+;;   (if (pair? pat)
+;;       (if (list? (car pat))
+;;           ;; If the pattern itself has sub-patterns
+;;           ;; Print them recursively
+;;           (let* ([result1 (write-scala (car pat) sp)]
+;;                  [result2 (write-scala (cdr pat) (cdr result1))])
+;;             (if (pair? (cdr pat))
+;;                 ;; Condition if cdr pat is a pair, that means more left
+;;                 (string-append (car result1) ", " (car result2))
+;;                 ;; Else, it has ended
+;;                 (string-append (car result1) (car result2))))
+;;           ;; Else, it must be a list like '(* _ _)
+;;           ;; Iterate over it
+;;           (match (car pat)
+;;             ['+ (string-append "Plus(" (car (write-scala (cdr pat) sp))) ]
+;;             ['- (if (equal? (length (cdr pat)) 2 )
+;;                     ;; If it is a unary minus, size of pattern will tell
+;;                     (let ([(sp1, str1)]))
+;;                     (string-append "Minus(" (car (write-scala (cdr pat) sp)))
+;;                     (string-append "UMinus(" (car (write-scala (cdr pat) sp)))) ]
+;;             ['* (string-append "Times(" (car (write-scala (cdr pat) sp))) ]
+;;             ['/ (if (equal? (length (cdr pat)) 2 )
+;;                     ;; If it is a unary div, size of pattern will tell
+;;                     (string-append "Division(" (car (write-scala (cdr pat) sp)))
+;;                     (string-append "Division(UnitLiteral(), "
+;;                                    (car (write-scala (cdr pat) sp)))) ]
+;;             ['/ (string-append "Division(" (car (write-scala (cdr pat) sp))) ]
+;;             ['pow (string-append "Pow(" (car (write-scala (cdr pat) sp))]
+;;             ['fabs (string-append "Abs(" (write-scala (cdr pat) sp))]
+;;             ['sqr (let ([literal (car (cdr pat))])
+;;                     (write-scala (cons '* (cons literal (cons literal '()))) sp))]
+;;             ['sqrt (string-append "Sqrt(" (write-scala (cdr pat) sp))]
+;;             [x (if (pair? (cdr pat))
+;;                    (string-append
+;;                     (string-append (if (symbol? x)
+;;                                        (sp x)
+;;                                        (numb-printer x)) ", ")
+;;                     (write-scala (cdr pat) sp))
+;;                    (string-append (if (symbol? x)
+;;                                       (sp x)
+;;                                       (numb-printer x)) (write-scala (cdr pat) sp)))]))
+;;       (cond [(symbol? pat) (sp pat)]
+;;             [(number? pat) (numb-printer pat)]
+;;             [(not (or (symbol? pat) (number? pat))) ")"])))
 
 (define *rulesets* (make-parameter '()))
 

@@ -29,8 +29,8 @@
   (string-append (symbol->string symb) ".copy"))
 
 (define (numb-printer numb)
-  (cond [(equal? numb 1) "UnitLiteral()"]
-        [(equal? numb 0) "Int32Literal(0)"]))
+  (cond [(equal? numb 1) "RealLiteral(one)"]
+        [(equal? numb 0) "RealLiteral(zero)"]))
 
 (define (add-case-numbering rule)
   (foldl
@@ -56,7 +56,6 @@
                 (string-append (car result1) ", " (car result2))
                 ;; Else, it has ended
                 (string-append (car result1) (car result2))))
-              ;;;(string-append (write-scala (car pat) sp) (write-scala (cdr pat) sp)))
           ;; Else, it must be a list like '(* _ _)
           ;; Iterate over it
           (match (car pat)

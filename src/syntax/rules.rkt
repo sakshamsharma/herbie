@@ -17,15 +17,63 @@
              (display (rule-name rule) port)
              (display "\n  expr match {\n    case " port)
              (display (car leftres) port)
-             (display " =>\n      " port)
+             (display (iffer (cddr leftres)) port)
+             (display " =>\n      Some(" port)
              (display (car rigtres) port)
-             (display "\n    case _ => randomRewriting(expr)(tail)\n  }\n" port)))])
+             (display ")\n    case _ => None\n  }\n" port)))])
+             ;;(display "\n    case _ => randomRewriting(expr)(tail)\n  }\n" port)))])
+
+(define (counter lst)
+  (let ([uniq (remove-duplicates lst)])
+    (map (lambda (x) {
+                      cons x (length (filter (lambda (y) (equal? y x)) lst))
+                           }) uniq)))
+
+(define (iffer lis)
+  (let* ([tuples (counter lis)]
+         [awesome-list {
+                        map
+                        (lambda (x)
+                          (let* ([cnt (cdr x)]
+                                 [symb (car x)]
+                                 [printer
+                                  (lambda (n) { string-append
+                                                  (symbol->string symb)
+                                                  "=="
+                                                  (symbol->string symb)
+                                                  (number->string n)
+                                                  })]
+                                 [iterat
+                                  (letrec ([awe (lambda (k)
+                                                  (if (equal? k 0)
+                                                      '()
+                                                      (cons (printer k) (awe (- k 1)))))])
+                                    awe)])
+                            (if (equal? cnt 1)
+                                ""
+                                (string-join
+                                 (iterat (- cnt 1))
+                                 " && "
+                                 ))))
+                        tuples
+                        }])
+    (if (not (equal? (length tuples) (length lis)))
+        ;; Something was repeated
+        (string-append " if ("
+                       (string-join (filter (lambda (x) (not (equal? x ""))) awesome-list) " && ")
+                       ")")
+        ;; Else just pass
+        ""
+    )))
 
 ;; Have 2 kinds of symbol printer since
 ;; printing symbols on the RHS requires them to have .copy attached
 ;; Ideally, symbols printed on the left should not get copied twice
 (define (print-symbol symb lis)
-  (cons (symbol->string symb) lis))
+  (let ([newcnt (length (filter (lambda (x) (equal? x symb)) lis))])
+    (cons (string-append (symbol->string symb) (if (equal? newcnt 0)
+                                                   ""
+                                                   (number->string newcnt))) (cons symb lis))))
 
 (define (print-symbol-copy symb lis)
   (cons (string-append (symbol->string symb) ".copy") lis))
@@ -43,6 +91,24 @@
      (+ n 1))
    0
    rule))
+
+(define (print-as-fxn ruleset name)
+  (foldl
+   (lambda (x n)
+     (display (string-append "def " name (number->string n) " (expr: Expr): Option[Expr] = {"))
+     (print x)
+     (display "}\n\n")
+     (+ n 1))
+   0
+   ruleset))
+
+(define (print-nums ruleset name)
+  (foldl
+   (lambda (x n)
+     (display (string-append name (number->string n) "(_),\n"))
+     (+ n 1))
+   0
+   ruleset))
 
 (define (awesome-symb-printer x sp)
   ;; Print symbol, return new list with function
@@ -88,9 +154,9 @@
                       (gen-scala (cons '* (cons literal (cons literal '()))) sp))]
               [x (let* ([tres (if (symbol? x)
                                   ;; Print symbol, return new list with function
-                                  (awesome-symb-printer x sp)
+                                  (awesome-symb-printer x (cdr result))
                                   ;; Else print number and return same sp
-                                  (cons (numb-printer x) sp))])
+                                  (cons (numb-printer x) (cdr result)))])
                    (if (pair? (cdr pat))
                        (cons (string-append (car tres)
                                             ", "

@@ -234,8 +234,8 @@
 ; Difference of squares
 (define-ruleset difference-of-squares-canonicalize (polynomials simplify)
   [difference-of-squares (- (sqr a) (sqr b))   (* (+ a b) (- a b))]
-  [difference-of-sqr-1   (- (sqr a) 1)         (* (+ a 1) (- a 1))]
-  [difference-of-sqr--1  (+ (sqr a) -1)        (* (+ a 1) (- a 1))])
+  [difference-of-sqr-1   (- (sqr a) 1)         (* (+ a 1) (- a 1))])
+;;  [difference-of-sqr--1  (+ (sqr a) -1)        (* (+ a 1) (- a 1))])
 
 (define-ruleset difference-of-squares-flip (polynomials)
   [flip-+     (+ a b)  (/ (- (sqr a) (sqr b)) (- a b))]
